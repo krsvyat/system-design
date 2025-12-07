@@ -1,0 +1,21 @@
+@startuml C4_Context_Payment_Platform
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title System Context diagram for Payment Platform
+
+Person(customer, "Customer", "Bank customer making payments and transfers")
+
+System(payment_platform, "Payment Platform", "Processes all types of payments and transfers")
+
+System_Ext(card_processing, "Card Processing", "Visa, Mastercard, MIR. Card transaction processing")
+System_Ext(merchants, "Merchants", "Online stores and services accepting payments")
+System_Ext(other_banks, "Other Banks", "External banks via SBP, SWIFT")
+System_Ext(dwh, "DWH", "Analytics and reporting")
+
+Rel(customer, payment_platform, "Makes payments and transfers")
+Rel(payment_platform, card_processing, "Card payments")
+Rel(payment_platform, merchants, "Payment callbacks")
+Rel(payment_platform, other_banks, "Transfers")
+Rel(payment_platform, dwh, "Events")
+
+@enduml

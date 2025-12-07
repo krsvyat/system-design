@@ -4,8 +4,7 @@
 
 1. Identification (Know Your Customer)
 2. Store client data (consents, name, status, rates, documents).
-3. Audit.
-4. Share client data with other contexts. E.g. Account context needs to use client id. 
+3. Share client data with other contexts. Publishes CustomerCreated event for Account to create default account. 
 
 ## Domain Type
 
