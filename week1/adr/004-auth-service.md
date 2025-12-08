@@ -21,10 +21,9 @@ Banking has specific requirements that Keycloak doesn't handle well:
 
 | Requirement                  | Keycloak          | Custom                     |
 | ---------------------------- | ----------------- | -------------------------- |
+| ESIA (Gosuslugi) integration | Not supported     | Custom integration         |
 | SMS OTP codes                | Plugin, limited   | Full control               |
 | Push confirmation            | Hard to integrate | Native                     |
-| ESIA (Gosuslugi) integration | Not supported     | Custom integration         |
-| Central Bank requirements    | Workarounds       | Built for compliance       |
 | Fraud checks on login        | Separate system   | Integrated with Anti-Fraud |
 | Custom audit logging         | Standard format   | Our format                 |
 
