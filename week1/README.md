@@ -1,6 +1,7 @@
 # Week 1
 
 ## Context map
+
 ![](diagrams/context.drawio.png)
 
 ## C1
@@ -49,9 +50,7 @@
 
 1. sync/async
    async, запись бухучету не нужна скорость, отдать в acl и забыть
-2. rest/grpc
-
--
+2. rest/grpc - async
 
 3. eventual consistency/sync consistency
    eventual consistency, но с гарантией доставки. при async коммунникации только eventual consistency
@@ -61,10 +60,7 @@
 1. sync/async
    async, потому что не так важна скорость доставки, мы не можем гарантировать быстрый респонс от sms/email/push
    можно sync и отдавать 202, но тогда можно потерять сообщение, если в Notifications сбой, а в kafka событие подождет
-2. rest/grpc
-
--
-
+2. rest/grpc - async
 3. eventual consistency/sync consistency
    async => eventual consistency
 
@@ -73,9 +69,7 @@
 1. sync/async
    async, мерчант - внешняя система, может быть недоступна, платеж не должен зависеть от мерчанта
 
-2. rest/grpc
-
--
+2. rest/grpc - async
 
 3. eventual consistency/sync consistency
    async => eventual consistency
@@ -84,9 +78,7 @@
 
 1. sync/async
    async, отослать и забыть
-2. rest/grpc
-
--
+2. rest/grpc - async
 
 3. eventual consistency/sync consistency
    async => eventual consistency
@@ -206,21 +198,22 @@ UUIDv7 содержит timestamp в первых 48 битах — сортир
 
 ### Последствия перехода
 
-- влияние на индексы и производительность 
-  - локальность вставок ок, как у sequence, т.к. в первых 48 битах linux timestamp, 
+- влияние на индексы и производительность
+  - локальность вставок ок, как у sequence, т.к. в первых 48 битах linux timestamp,
   - рост индекса - в два раза быстрее (8 byte => 16 byte)
   - размер ключа в два раза больше
 
 - влияние на интеграции:
   - старые id сохраняем, делаем маппинг sequence на UUIDv7, чтобы например для banking core отдавать id в старом формате
-  - текущие внешние api 
-    - видят оба id (новое поле) или 
+  - текущие внешние api
+    - видят оба id (новое поле) или
     - обращаются в новую версию api v2
   - будущие внешние api получают только UUIDv7
 
 миграция данных:
+
 - ничего не делаем с существующими платежами, не генерим новый id для старых платежей
 - обновляем в каждом микросервисе api, добавляем логику резолва id в зависимости от того, число это или текст
 
 - нужна ли двоичная совместимость или можно оставить старые id только внутри legacy.
-двоичная совместимость не нужна, оставить старые id внутри legacy и acl-маппинге id
+  двоичная совместимость не нужна, оставить старые id внутри legacy и acl-маппинге id
