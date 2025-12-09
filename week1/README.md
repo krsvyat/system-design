@@ -154,6 +154,15 @@ PaymentCreated - событие уже после Anti-Fraud approve.
 
 - TTL + delayed retry (отложенная повторная отправка)
 
+### таблица
+| Поток / сценарий | Брокер | Тип сообщений | Обоснование |
+|------------------|--------|---------------|-------------|
+| PaymentCompleted → Notifications | Kafka | Event (доменное событие — факт свершился) | Много подписчиков на это событие (Notifications, DWH, Core Banking, Anti-Fraud (training)...). 1 топик вместо n очередей. Нужно durability сообщений, чтобы перечитать, если Notifications по каким-то причинам потерял. Порядок важен, событие paymentcompleted должно быть после начала платежа |
+| PaymentCreated → Anti-Fraud | Kafka | Event | PaymentCreated - событие уже после Anti-Fraud approve. Много подписчиков на это событие (Notifications, DWH, Core Banking, Anti-Fraud (training)...). 1 топик вместо n очередей |
+| Телеметрия/лог транзакций | Kafka | Event (логи, метрики) | Огромный объём данных, Kafka рассчитана на стриминговую аналитику. подписчики (DWH, ...) читают независимо |
+| Очередь генерации отчётов | RabbitMQ | Command/Job | RabbitMQ часто применяют для управления заданиями. Один получатель на задание. Приоритеты: срочные отчёты вперёд. TTL: устаревшие задания можно отбросить (часы, а не дни как в kafka). Не нужно хранить задания после ack — отчёт сгенерирован и готов |
+| Callbacks retry (тяжёлые повторы) | RabbitMQ | Command/Job | TTL + delayed retry (отложенная повторная отправка) |
+
 ## API Gateway
 
 **Kong** - нам нужно много фич
