@@ -1,0 +1,73 @@
+@startuml c2_container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Payment Platform - Container Diagram (C2)
+
+Person(user, "User", "Mobile/Web client")
+
+System_Boundary(payment_platform, "Payment Platform") {
+
+    Container(gateway, "API Gateway", "Kong / Nginx", "Routes requests, authentication")
+
+    Container(bff, "BFF", "Spring Boot", "Backend for Frontend, initiates payments, reads status")
+
+    Container(wallet_service, "Wallet Service", "Spring Boot", "Manages balances and fund reservations")
+
+    Container(transaction_service, "Transaction Service", "Spring Boot", "Processes payments via external provider")
+
+    Container(callback_service, "Callback Service", "Spring Boot", "Receives provider callbacks")
+
+    Container(query_service, "Query Service", "Spring Boot", "CQRS read-model")
+
+    ContainerDb(wallet_db, "Wallet DB", "PostgreSQL", "Wallets, transactions, outbox")
+
+    ContainerDb(transaction_db, "Transaction DB", "PostgreSQL", "Payment state, outbox")
+
+    ContainerDb(query_db, "Query DB", "PostgreSQL", "Payment projections")
+
+    ContainerQueue(broker, "Kafka", "Message Broker", "Async event exchange")
+}
+
+System_Ext(provider, "Payment Provider", "External payment gateway")
+
+' === LAYOUT ===
+Lay_R(wallet_service, broker)
+Lay_R(broker, transaction_service)
+Lay_R(transaction_service, callback_service)
+Lay_D(bff, broker)
+Lay_D(broker, query_service)
+
+' === RELATIONSHIPS ===
+
+' Entry point
+Rel_D(user, gateway, "HTTPS")
+Rel_D(gateway, bff, "HTTP")
+
+' BFF commands
+Rel_L(bff, wallet_service, "HTTP", "reserveFunds")
+Rel_R(bff, query_service, "HTTP", "getStatus, getHistory")
+
+' Database connections
+Rel_D(wallet_service, wallet_db, "")
+Rel_D(transaction_service, transaction_db, "")
+Rel_D(query_service, query_db, "")
+
+' Publishers -> Kafka
+Rel_R(wallet_service, broker, "PaymentInitiated")
+Rel_U(transaction_service, broker, "PaymentCompleted, PaymentFailed")
+Rel_L(callback_service, broker, "ProviderCallbackReceived")
+
+' Kafka -> Consumers
+Rel_D(broker, transaction_service, "PaymentInitiated, ProviderCallbackReceived")
+Rel_L(broker, wallet_service, "PaymentCompleted, PaymentFailed")
+Rel_D(broker, query_service, "PaymentInitiated, PaymentCompleted, PaymentFailed")
+
+' Transaction -> Provider
+Rel_R(transaction_service, provider, "HTTPS", "initiatePayment")
+
+' Provider callback flow
+Rel(provider, callback_service, "HTTPS", "callback")
+
+SHOW_LEGEND()
+
+@enduml
