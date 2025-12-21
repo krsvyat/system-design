@@ -1,4 +1,4 @@
-@startuml c2_container
+@startuml c2
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
 title Payment Platform - Container Diagram (C2)
@@ -72,7 +72,8 @@ Rel_D(broker, query_service, "PaymentInitiated, PaymentCompleted, PaymentFailed"
 Rel_R(transaction_service, provider, "HTTPS", "initiatePayment")
 
 ' Provider callback flow
-Rel(provider, callback_service, "HTTPS", "callback")
+Rel(provider, gateway, "HTTPS", "callback")
+Rel(gateway, callback_service, "HTTP", "callback")
 
 SHOW_LEGEND()
 

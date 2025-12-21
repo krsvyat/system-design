@@ -60,6 +60,10 @@ class PumlHandler(FileSystemEventHandler):
         if not event.is_directory and event.src_path.endswith(".puml"):
             build_file(Path(event.src_path))
 
+    def on_moved(self, event):
+        if not event.is_directory and event.dest_path.endswith(".puml"):
+            build_file(Path(event.dest_path))
+
 
 def main():
     check_plantuml()

@@ -1,4 +1,4 @@
-@startuml seq_success
+@startuml seq-success
 title Payment Flow - Success Scenario
 
 participant User
@@ -9,7 +9,7 @@ participant "Kafka Connect" as KC
 participant Kafka
 participant Transaction
 participant "Transaction DB" as TxDB
-participant Provider
+participant "Provider\n<<external>>" as Provider
 participant Gateway
 participant Callback
 participant "Callback DB" as CallbackDB

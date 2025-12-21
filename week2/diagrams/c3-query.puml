@@ -1,4 +1,4 @@
-@startuml c3_query
+@startuml c3-query
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
 
 title Query Service - Component Diagram (C3)

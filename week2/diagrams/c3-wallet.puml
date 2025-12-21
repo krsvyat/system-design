@@ -1,4 +1,4 @@
-@startuml c3_wallet
+@startuml c3-wallet
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
 
 title Wallet Service - Component Diagram (C3)

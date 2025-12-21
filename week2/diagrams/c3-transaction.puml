@@ -1,4 +1,4 @@
-@startuml c3_transaction
+@startuml c3-transaction
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
 
 title Transaction Service - Component Diagram (C3)
