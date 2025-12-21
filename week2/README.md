@@ -226,13 +226,13 @@ Response `200 OK`:
 
 #### wallet_outbox
 
-| Field      | Type        | Описание                            |
-| ---------- | ----------- | ----------------------------------- |
-| id         | uuid        | Первичный ключ                      |
-| payment_id | uuid        | ID платежа                          |
-| event_type | text        | Название события (PaymentInitiated) |
-| payload    | jsonb       | Данные события в формате JSON       |
-| created_at | timestamptz | Время создания                      |
+| Field      | Type        | Описание                                   |
+| ---------- | ----------- | ------------------------------------------ |
+| id         | uuid        | Первичный ключ                             |
+| payment_id | uuid        | ID платежа                                 |
+| event_type | text        | Название события (всегда PaymentInitiated) |
+| payload    | jsonb       | Данные события в формате JSON              |
+| created_at | timestamptz | Время создания                             |
 
 ### Transaction DB
 
@@ -289,14 +289,18 @@ Response `200 OK`:
 
 Публикует Wallet Service после резервирования средств.
 
-| Поле      | Тип    | Описание                    |
-| --------- | ------ | --------------------------- |
-| paymentId | string | ID платежа                  |
-| walletId  | string | ID кошелька                 |
-| userId    | string | ID пользователя             |
-| amount    | number | Сумма в копейках/центах/... |
-| currency  | string | Код валюты                  |
-| createdAt | string | Время создания              |
+| Поле                    | Тип    | Описание                    |
+| ----------------------- | ------ | --------------------------- |
+| paymentId               | string | ID платежа                  |
+| walletId                | string | ID кошелька                 |
+| userId                  | string | ID пользователя             |
+| amount                  | number | Сумма в копейках/центах/... |
+| currency                | string | Код валюты                  |
+| recipient               | object | Данные получателя           |
+| recipient.accountNumber | string | Номер счёта                 |
+| recipient.bankBic       | string | БИК банка                   |
+| recipient.name          | string | ФИО получателя              |
+| createdAt               | string | Время создания              |
 
 ### PaymentCompleted
 
@@ -328,3 +332,33 @@ Response `200 OK`:
 | providerTxnId | string | ID транзакции от провайдера |
 | status        | string | SUCCESS, FAILED             |
 | receivedAt    | string | Время получения             |
+
+## Процесс исполнения платежа
+
+**Success**:
+
+1. POST /payments с клиента на API Gateway → BFF. Body: amount, walletId, currency, recipient.
+2. POST /wallets/{walletId}/reservations с BFF на Wallet Service.
+3. Wallet Service в одной транзакции: увеличивает wallets.reserved, создаёт запись в wallet_transactions (type=RESERVE, status=COMPLETED), пишет в wallet_outbox событие PaymentInitiated.
+4. Kafka Connect читает WAL, отправляет PaymentInitiated в Kafka.
+5. Transaction Service читает PaymentInitiated, создаёт запись в payments (status=PROCESSING).
+6. Transaction Service вызывает External Provider по HTTP, передаёт callback URL, получает 202 Accepted с providerTxnId.
+7. Transaction Service обновляет payments.provider_txn_id.
+8. External Provider делает callback через API Gateway в Callback Service (status=SUCCESS).
+9. Callback Service сохраняет callback, пишет в outbox событие ProviderCallbackReceived.
+10. Kafka Connect читает WAL из Callback DB, отправляет ProviderCallbackReceived в Kafka.
+11. Transaction Service читает событие, обновляет payments (status=COMPLETED), пишет в payment_outbox событие PaymentCompleted.
+12. Kafka Connect читает WAL, отправляет PaymentCompleted в Kafka.
+13. Wallet Service читает PaymentCompleted, в одной транзакции: уменьшает wallets.reserved, уменьшает wallets.balance, создаёт запись в wallet_transactions (type=COMMIT, status=COMPLETED).
+14. Query Service читает PaymentCompleted, обновляет payment_projections.
+
+**Failure**:
+
+1-7. Аналогично Success.
+8. External Provider делает callback через API Gateway в Callback Service (status=FAILED). Или callback не приходит (timeout).
+9. Аналогично Success (ProviderCallbackReceived с status=FAILED). При timeout — Transaction Service по таймеру сам создаёт PaymentFailed.
+10. Аналогично Success.
+11. Transaction Service читает событие, обновляет payments (status=FAILED, error_code), пишет в payment_outbox событие PaymentFailed.
+12. Kafka Connect читает WAL, отправляет PaymentFailed в Kafka.
+13. Wallet Service читает PaymentFailed, в одной транзакции: уменьшает wallets.reserved, создаёт запись в wallet_transactions (type=RELEASE, status=COMPLETED).
+14. Query Service читает PaymentFailed, обновляет payment_projections.
