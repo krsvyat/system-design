@@ -1,0 +1,111 @@
+@startuml seq_failure
+title Payment Flow - Failure Scenario
+
+participant User
+participant BFF
+participant Wallet
+participant "Wallet DB" as WalletDB
+participant "Kafka Connect" as KC
+participant Kafka
+participant Transaction
+participant "Transaction DB" as TxDB
+participant Provider
+participant Gateway
+participant Callback
+participant "Callback DB" as CallbackDB
+participant Query
+participant "Query DB" as QueryDB
+
+== Reserve Funds ==
+
+User -> BFF: POST /payments
+note right
+  {
+    "walletId": "uuid",
+    "amount": 1000,
+    "currency": "RUB"
+  }
+end note
+
+BFF -> Wallet: POST /wallets/{walletId}/reservations
+note right
+  {
+    "amount": 1000,
+    "currency": "RUB"
+  }
+end note
+Wallet -> WalletDB: write transaction (RESERVED)\n+ outbox (PaymentInitiated)
+Wallet --> BFF: paymentId
+
+BFF --> User: 202 Accepted
+note right
+  {
+    "paymentId": "uuid",
+    "status": "RESERVED"
+  }
+end note
+
+== Publish Event (CDC) ==
+
+KC -> WalletDB: read WAL
+KC -> Kafka: PaymentInitiated
+
+== Process Payment ==
+
+Kafka -> Transaction: PaymentInitiated
+Transaction -> TxDB: write payment (PROCESSING)
+Transaction -> Provider: POST /payments
+note right
+  {
+    "paymentId": "uuid",
+    "amount": 1000,
+    "currency": "RUB"
+  }
+end note
+Provider --> Transaction: 202 Accepted
+note right
+  {
+    "providerTxnId": "uuid",
+    "status": "PENDING"
+  }
+end note
+Transaction -> TxDB: save providerTxnId, status=PROCESSING
+
+== Provider Callback (FAILURE) ==
+
+note over Transaction, Provider
+  Timeout scenario: if no callback within N minutes,
+  Transaction Service scheduler creates PaymentFailed event
+end note
+
+Provider -> Gateway: POST /callbacks
+Gateway -> Callback: POST /callbacks
+note right
+  {
+    "providerTxnId": "uuid",
+    "status": "FAILED",
+    "errorCode": "INSUFFICIENT_FUNDS"
+  }
+end note
+Callback -> CallbackDB: save callback + outbox (ProviderCallbackReceived)
+KC -> CallbackDB: read WAL
+KC -> Kafka: ProviderCallbackReceived
+Kafka -> Transaction: ProviderCallbackReceived
+Transaction -> TxDB: update (FAILED)\n+ outbox (PaymentFailed)
+
+== Publish Failure (CDC) ==
+
+KC -> TxDB: read WAL
+KC -> Kafka: PaymentFailed
+
+== Compensate: Release Funds ==
+
+Kafka -> Wallet: PaymentFailed
+Wallet -> WalletDB: release reserved funds (FAILED)
+
+== Update Read Model ==
+
+Kafka -> Query: PaymentFailed
+Query -> QueryDB: update projection
+
+@enduml
