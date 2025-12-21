@@ -1,0 +1,29 @@
+@startuml c3_query
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Query Service - Component Diagram (C3)
+
+Container(bff, "BFF", "", "")
+ContainerQueue(kafka, "Kafka", "", "")
+ContainerDb(db, "Query DB", "PostgreSQL", "")
+
+Container_Boundary(query, "Query Service") {
+    Component(event_handler, "Event Handler", "Kafka Listener", "Subscribes to payment events")
+    Component(projection, "Projection Builder", "Service", "Builds denormalized read model")
+    Component(api, "API Controller", "REST", "getStatus, getHistory")
+}
+
+' Kafka -> Query
+Rel_D(kafka, event_handler, "PaymentInitiated, PaymentCompleted, PaymentFailed")
+
+' Internal flow
+Rel_D(event_handler, projection, "calls")
+Rel_D(projection, db, "writes projections")
+Rel_U(api, db, "reads")
+
+' External
+Rel_D(bff, api, "HTTP", "getStatus, getHistory")
+
+SHOW_LEGEND()
+
+@enduml
