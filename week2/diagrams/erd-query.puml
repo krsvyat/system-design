@@ -9,6 +9,7 @@ entity "payment_projections" {
   * amount : bigint
   * currency : text
   * status : text
+  * error_code : text
   * provider_txn_id : text
   * created_at : timestamptz
   * completed_at : timestamptz

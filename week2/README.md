@@ -93,6 +93,7 @@ Response `200 OK`:
   "amount": 1000,
   "currency": "RUB",
   "status": "COMPLETED",
+  "errorCode": null,
   "providerTxnId": "uuid",
   "createdAt": "2024-01-15T10:00:00Z",
   "completedAt": "2024-01-15T10:00:05Z"
@@ -119,6 +120,7 @@ Response `200 OK`:
       "amount": 1000,
       "currency": "RUB",
       "status": "COMPLETED",
+      "errorCode": null,
       "providerTxnId": "uuid",
       "createdAt": "2024-01-15T10:00:00Z",
       "completedAt": "2024-01-15T10:00:05Z"
@@ -246,6 +248,7 @@ Response `200 OK`:
 | amount          | bigint      | Сумма в копейках/центах/...            |
 | currency        | text        | Код валюты                             |
 | status          | text        | PROCESSING, COMPLETED, FAILED          |
+| error_code      | text        | Код ошибки                             |
 | created_at      | timestamptz | Время создания                         |
 
 #### payment_outbox
@@ -272,9 +275,56 @@ Response `200 OK`:
 | amount          | bigint      | Сумма в копейках/центах/...             |
 | currency        | text        | Код валюты                              |
 | status          | text        | RESERVED, PROCESSING, COMPLETED, FAILED |
+| error_code      | text        | Код ошибки                              |
 | provider_txn_id | text        | ID транзакции от провайдера             |
 | created_at      | timestamptz | Время создания платежа                  |
-| completed_at    | timestamptz | Время завершения (null если в процессе) |
+| completed_at    | timestamptz | Время завершения                        |
 
 - GET /payments/{paymentId} => "SELECT \* FROM payment_projections WHERE payment_id = ?"
 - GET /payments?walletId={walletId} => "SELECT \* FROM payment_projections WHERE wallet_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
+
+## Events
+
+### PaymentInitiated
+
+Публикует Wallet Service после резервирования средств.
+
+| Поле      | Тип    | Описание                    |
+| --------- | ------ | --------------------------- |
+| paymentId | string | ID платежа                  |
+| walletId  | string | ID кошелька                 |
+| userId    | string | ID пользователя             |
+| amount    | number | Сумма в копейках/центах/... |
+| currency  | string | Код валюты                  |
+| createdAt | string | Время создания              |
+
+### PaymentCompleted
+
+Публикует Transaction Service после успешного callback от провайдера.
+
+| Поле          | Тип    | Описание                    |
+| ------------- | ------ | --------------------------- |
+| paymentId     | string | ID платежа                  |
+| providerTxnId | string | ID транзакции от провайдера |
+| completedAt   | string | Время завершения            |
+
+### PaymentFailed
+
+Публикует Transaction Service после неуспешного callback или таймаута.
+
+| Поле          | Тип    | Описание                                       |
+| ------------- | ------ | ---------------------------------------------- |
+| paymentId     | string | ID платежа                                     |
+| providerTxnId | string | ID транзакции от провайдера (null при timeout) |
+| errorCode     | string | Код ошибки                                     |
+| completedAt   | string | Время завершения                               |
+
+### ProviderCallbackReceived
+
+Публикует Callback Service после получения callback от провайдера.
+
+| Поле          | Тип    | Описание                    |
+| ------------- | ------ | --------------------------- |
+| providerTxnId | string | ID транзакции от провайдера |
+| status        | string | SUCCESS, FAILED             |
+| receivedAt    | string | Время получения             |

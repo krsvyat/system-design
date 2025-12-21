@@ -19,31 +19,10 @@ participant "Query DB" as QueryDB
 == Reserve Funds ==
 
 User -> BFF: POST /payments
-note right
-  {
-    "walletId": "uuid",
-    "amount": 1000,
-    "currency": "RUB"
-  }
-end note
-
 BFF -> Wallet: POST /wallets/{walletId}/reservations
-note right
-  {
-    "amount": 1000,
-    "currency": "RUB"
-  }
-end note
 Wallet -> WalletDB: write transaction (RESERVED)\n+ outbox (PaymentInitiated)
 Wallet --> BFF: paymentId
-
 BFF --> User: 202 Accepted
-note right
-  {
-    "paymentId": "uuid",
-    "status": "RESERVED"
-  }
-end note
 
 == Publish Event (CDC) ==
 
@@ -55,20 +34,7 @@ KC -> Kafka: PaymentInitiated
 Kafka -> Transaction: PaymentInitiated
 Transaction -> TxDB: write payment (PROCESSING)
 Transaction -> Provider: POST /payments
-note right
-  {
-    "paymentId": "uuid",
-    "amount": 1000,
-    "currency": "RUB"
-  }
-end note
 Provider --> Transaction: 202 Accepted
-note right
-  {
-    "providerTxnId": "uuid",
-    "status": "PENDING"
-  }
-end note
 Transaction -> TxDB: save providerTxnId, status=PROCESSING
 
 == Provider Callback ==

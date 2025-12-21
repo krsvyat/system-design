@@ -9,6 +9,7 @@ entity "payments" {
   * amount : bigint
   * currency : text
   * status : text
+  * error_code : text
   * created_at : timestamptz
 }
 
