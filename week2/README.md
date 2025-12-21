@@ -89,9 +89,11 @@ Response `200 OK`:
 {
   "paymentId": "uuid",
   "walletId": "uuid",
+  "userId": "uuid",
   "amount": 1000,
   "currency": "RUB",
   "status": "COMPLETED",
+  "providerTxnId": "uuid",
   "createdAt": "2024-01-15T10:00:00Z",
   "completedAt": "2024-01-15T10:00:05Z"
 }
@@ -112,10 +114,14 @@ Response `200 OK`:
   "payments": [
     {
       "paymentId": "uuid",
+      "walletId": "uuid",
+      "userId": "uuid",
       "amount": 1000,
       "currency": "RUB",
       "status": "COMPLETED",
-      "createdAt": "2024-01-15T10:00:00Z"
+      "providerTxnId": "uuid",
+      "createdAt": "2024-01-15T10:00:00Z",
+      "completedAt": "2024-01-15T10:00:05Z"
     }
   ],
   "total": 100,
@@ -225,3 +231,50 @@ Response `200 OK`:
 | event_type | text        | Название события (PaymentInitiated) |
 | payload    | jsonb       | Данные события в формате JSON       |
 | created_at | timestamptz | Время создания                      |
+
+### Transaction DB
+
+![ERD Transaction](diagrams/erd-transaction.png)
+
+#### payments
+
+| Field           | Type        | Описание                               |
+| --------------- | ----------- | -------------------------------------- |
+| id              | uuid        | Первичный ключ                         |
+| payment_id      | uuid        | ID платежа из Wallet, защита от дублей |
+| provider_txn_id | text        | ID транзакции от провайдера            |
+| amount          | bigint      | Сумма в копейках/центах/...            |
+| currency        | text        | Код валюты                             |
+| status          | text        | PROCESSING, COMPLETED, FAILED          |
+| created_at      | timestamptz | Время создания                         |
+
+#### payment_outbox
+
+| Field      | Type        | Описание                                   |
+| ---------- | ----------- | ------------------------------------------ |
+| id         | uuid        | Первичный ключ                             |
+| payment_id | uuid        | ID платежа                                 |
+| event_type | text        | Название события (PaymentCompleted/Failed) |
+| payload    | jsonb       | Данные события в формате JSON              |
+| created_at | timestamptz | Время создания                             |
+
+### Query DB
+
+![ERD Query](diagrams/erd-query.png)
+
+#### payment_projections
+
+| Field           | Type        | Описание                                |
+| --------------- | ----------- | --------------------------------------- |
+| payment_id      | uuid        | Первичный ключ                          |
+| wallet_id       | uuid        | ID кошелька отправителя                 |
+| user_id         | uuid        | ID пользователя                         |
+| amount          | bigint      | Сумма в копейках/центах/...             |
+| currency        | text        | Код валюты                              |
+| status          | text        | RESERVED, PROCESSING, COMPLETED, FAILED |
+| provider_txn_id | text        | ID транзакции от провайдера             |
+| created_at      | timestamptz | Время создания платежа                  |
+| completed_at    | timestamptz | Время завершения (null если в процессе) |
+
+- GET /payments/{paymentId} => "SELECT \* FROM payment_projections WHERE payment_id = ?"
+- GET /payments?walletId={walletId} => "SELECT \* FROM payment_projections WHERE wallet_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"

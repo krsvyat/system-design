@@ -1,0 +1,17 @@
+@startuml erd-query
+hide circle
+
+entity "payment_projections" {
+  * payment_id : uuid <<PK>>
+  --
+  * wallet_id : uuid
+  * user_id : uuid
+  * amount : bigint
+  * currency : text
+  * status : text
+  * provider_txn_id : text
+  * created_at : timestamptz
+  * completed_at : timestamptz
+}
+
+@enduml
