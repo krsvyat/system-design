@@ -25,6 +25,8 @@ System_Boundary(payment_platform, "Payment Platform") {
 
     ContainerDb(query_db, "Query DB", "PostgreSQL", "Payment projections")
 
+    ContainerDb(callback_db, "Callback DB", "PostgreSQL", "Callbacks, outbox")
+
     ContainerQueue(broker, "Kafka", "Message Broker", "Async event exchange")
 
     Container(kafka_connect, "Kafka Connect", "Debezium", "CDC from outbox tables")
@@ -53,14 +55,13 @@ Rel_R(bff, query_service, "HTTP", "getStatus, getHistory")
 Rel_D(wallet_service, wallet_db, "")
 Rel_D(transaction_service, transaction_db, "")
 Rel_D(query_service, query_db, "")
+Rel_D(callback_service, callback_db, "")
 
 ' CDC: Kafka Connect reads outbox tables
 Rel_U(kafka_connect, wallet_db, "reads WAL")
 Rel_U(kafka_connect, transaction_db, "reads WAL")
-Rel_U(kafka_connect, broker, "PaymentInitiated, PaymentCompleted, PaymentFailed")
-
-' Callback Service -> Kafka
-Rel_L(callback_service, broker, "ProviderCallbackReceived")
+Rel_U(kafka_connect, callback_db, "reads WAL")
+Rel_U(kafka_connect, broker, "PaymentInitiated, PaymentCompleted, PaymentFailed, ProviderCallbackReceived")
 
 ' Kafka -> Consumers
 Rel_D(broker, transaction_service, "PaymentInitiated, ProviderCallbackReceived")

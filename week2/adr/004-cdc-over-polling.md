@@ -14,7 +14,7 @@ Transactional Outbox pattern requires publishing events from outbox table to Kaf
 
 ## Decision
 
-We use **CDC via Debezium** for outbox publishing in both Wallet Service and Transaction Service.
+We use **CDC via Debezium** for outbox publishing in Wallet Service, Transaction Service, and Callback Service.
 
 ### Why CDC
 
