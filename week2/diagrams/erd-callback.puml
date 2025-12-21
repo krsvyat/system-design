@@ -1,0 +1,22 @@
+@startuml erd-callback
+hide circle
+
+entity "callbacks" {
+  * id : uuid <<PK>>
+  --
+  * provider_txn_id : text
+  * status : text
+  * raw_payload : jsonb
+  * received_at : timestamptz
+}
+
+entity "callback_outbox" {
+  * id : uuid <<PK>>
+  --
+  * provider_txn_id : text
+  * event_type : text
+  * payload : jsonb
+  * created_at : timestamptz
+}
+
+@enduml

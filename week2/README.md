@@ -261,6 +261,30 @@ Response `200 OK`:
 | payload    | jsonb       | Данные события в формате JSON              |
 | created_at | timestamptz | Время создания                             |
 
+### Callback DB
+
+![ERD Callback](diagrams/erd-callback.png)
+
+#### callbacks
+
+| Field           | Type        | Описание                    |
+| --------------- | ----------- | --------------------------- |
+| id              | uuid        | Первичный ключ              |
+| provider_txn_id | text        | ID транзакции от провайдера |
+| status          | text        | SUCCESS, FAILED             |
+| raw_payload     | jsonb       | Сырой ответ от провайдера   |
+| received_at     | timestamptz | Время получения             |
+
+#### callback_outbox
+
+| Field           | Type        | Описание                                    |
+| --------------- | ----------- | ------------------------------------------- |
+| id              | uuid        | Первичный ключ                              |
+| provider_txn_id | text        | ID транзакции от провайдера                 |
+| event_type      | text        | Название события (ProviderCallbackReceived) |
+| payload         | jsonb       | Данные события в формате JSON               |
+| created_at      | timestamptz | Время создания                              |
+
 ### Query DB
 
 ![ERD Query](diagrams/erd-query.png)
@@ -355,6 +379,7 @@ Response `200 OK`:
 **Failure**:
 
 1-7. Аналогично Success.
+
 8. External Provider делает callback через API Gateway в Callback Service (status=FAILED). Или callback не приходит (timeout).
 9. Аналогично Success (ProviderCallbackReceived с status=FAILED). При timeout — Transaction Service по таймеру сам создаёт PaymentFailed.
 10. Аналогично Success.
@@ -362,3 +387,52 @@ Response `200 OK`:
 12. Kafka Connect читает WAL, отправляет PaymentFailed в Kafka.
 13. Wallet Service читает PaymentFailed, в одной транзакции: уменьшает wallets.reserved, создаёт запись в wallet_transactions (type=RELEASE, status=COMPLETED).
 14. Query Service читает PaymentFailed, обновляет payment_projections.
+
+## Saga
+
+Используется хореография — нет центрального оркестратора, сервисы слушают события и сами решают, что делать.
+
+### Шаг 1: Reserve (Wallet Service)
+
+- **Локальная транзакция:** увеличить wallets.reserved, создать wallet_transactions (type=RESERVE), записать в wallet_outbox (PaymentInitiated)
+- **Компенсация:** уменьшить wallets.reserved, создать wallet_transactions (type=RELEASE)
+
+### Шаг 2: Process (Transaction Service)
+
+- **Локальная транзакция:** создать payments (status=PROCESSING), вызвать провайдера, сохранить provider_txn_id
+- **Компенсация:** нет. Провайдер — внешняя система, мы не можем отменить запрос. Провайдер сам возвращает SUCCESS или FAILED, это не компенсация, а результат.
+
+### Завершение саги (Wallet Service)
+
+По результату шага 2:
+
+- **PaymentCompleted** → COMMIT: уменьшить wallets.reserved, уменьшить wallets.balance, создать wallet_transactions (type=COMMIT)
+- **PaymentFailed** → RELEASE: уменьшить wallets.reserved, создать wallet_transactions (type=RELEASE)
+
+## Outbox
+
+1. Wallet Service — wallet_outbox
+2. Transaction Service — payment_outbox
+3. Callback Service — callback_outbox
+
+Callback Service использует outbox, чтобы гарантировать доставку события в Kafka.
+
+Без outbox: если Callback Service получил callback, ответил провайдеру 200 OK, но упал до отправки в Kafka — событие потеряется.
+
+С outbox: сохранение callback и запись в outbox происходят в одной транзакции, CDC гарантирует доставку.
+
+## Idempotency
+
+- Wallet Service — проверяет payment_id в wallet_transactions. Если резерв уже создан, возвращает существующий.
+- Transaction Service — проверяет payment_id в payments. Если платёж уже есть, не вызывает провайдера повторно.
+- Callback Service — проверяет provider_txn_id в callbacks. Если callback уже обработан, не пишет в outbox.
+
+## CQRS
+
+- **Write:** Wallet Service, Transaction Service, Callback Service — каждый пишет в свою БД
+- **Read:** Query Service — читает из payment_projections, денормализованная таблица, вставки при получении событий кафки
+
+Индексы в Query DB:
+
+- `payment_id` — PK, поиск по ID платежа
+- `CREATE INDEX idx_payment_projections_wallet_created ON payment_projections (wallet_id, created_at DESC);` — история платежей кошелька с сортировкой
