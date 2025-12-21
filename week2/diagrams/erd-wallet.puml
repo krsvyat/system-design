@@ -1,0 +1,36 @@
+@startuml erd-wallet
+hide circle
+
+entity "wallets" {
+  * id : uuid <<PK>>
+  --
+  * user_id : uuid
+  * balance : bigint
+  * reserved : bigint
+  * currency : text
+  * created_at : timestamptz
+}
+
+entity "wallet_transactions" {
+  * id : uuid <<PK>>
+  --
+  * wallet_id : uuid <<FK>>
+  * payment_id : uuid
+  * amount : bigint
+  * type : text
+  * status : text
+  * created_at : timestamptz
+}
+
+entity "wallet_outbox" {
+  * id : uuid <<PK>>
+  --
+  * payment_id : uuid
+  * event_type : text
+  * payload : jsonb
+  * created_at : timestamptz
+}
+
+wallets ||--o{ wallet_transactions
+
+@enduml

@@ -32,10 +32,6 @@
 
 ![Sequence Failure](diagrams/seq-failure.png)
 
-```plantuml
-!include diagrams/seq-failure.puml
-```
-
 Отличия от success:
 
 - Provider callback со статусом FAILED
@@ -190,3 +186,42 @@ Response `200 OK`:
   "received": true
 }
 ```
+
+## ERD
+
+### Wallet DB
+
+![ERD Wallet](diagrams/erd-wallet.png)
+
+#### wallets
+
+| Field      | Type        | Описание                                |
+| ---------- | ----------- | --------------------------------------- |
+| id         | uuid        | Первичный ключ кошелька                 |
+| user_id    | uuid        | Владелец кошелька                       |
+| balance    | bigint      | Доступный баланс в минимальных единицах |
+| reserved   | bigint      | Зарезервированная сумма                 |
+| currency   | text        | Код валюты (RUB, USD, ...)              |
+| created_at | timestamptz | Время создания                          |
+
+#### wallet_transactions
+
+| Field      | Type        | Описание                                        |
+| ---------- | ----------- | ----------------------------------------------- |
+| id         | uuid        | Первичный ключ                                  |
+| wallet_id  | uuid        | FK на wallets                                   |
+| payment_id | uuid        | ID платежа, защита от повторного резервирования |
+| amount     | bigint      | Сумма в копейках/центах/...                     |
+| type       | text        | RESERVE, COMMIT, RELEASE                        |
+| status     | text        | PENDING, COMPLETED, FAILED                      |
+| created_at | timestamptz | Время создания                                  |
+
+#### wallet_outbox
+
+| Field      | Type        | Описание                            |
+| ---------- | ----------- | ----------------------------------- |
+| id         | uuid        | Первичный ключ                      |
+| payment_id | uuid        | ID платежа                          |
+| event_type | text        | Название события (PaymentInitiated) |
+| payload    | jsonb       | Данные события в формате JSON       |
+| created_at | timestamptz | Время создания                      |
