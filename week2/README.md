@@ -8,6 +8,13 @@
 
 ![C2 Container](diagrams/c2.png)
 
+| Bounded Context    | Ответственность                       | Команды                                 | Слушает события                                   | Публикует события               |
+| ------------------ | ------------------------------------- | --------------------------------------- | ------------------------------------------------- | ------------------------------- |
+| Wallet             | Управление балансом, резервирование   | ReserveFunds, CommitFunds, ReleaseFunds | PaymentCompleted, PaymentFailed                   | PaymentInitiated                |
+| Payment            | Взаимодействие с провайдером          | InitiatePayment                         | PaymentInitiated, ProviderCallbackReceived        | PaymentCompleted, PaymentFailed |
+| Callback           | Приём callback от провайдера          | HandleCallback                          | —                                                 | ProviderCallbackReceived        |
+| Query (Read Model) | Денормализованные проекции для чтения | —                                       | PaymentInitiated, PaymentCompleted, PaymentFailed | —                               |
+
 ### C3 Component Diagrams
 
 #### Wallet Service
@@ -421,11 +428,17 @@ Callback Service использует outbox, чтобы гарантирова�
 
 С outbox: сохранение callback и запись в outbox происходят в одной транзакции, CDC гарантирует доставку.
 
+### Polling vs CDC
+
+[См ADR](adr/004-cdc-over-polling.md).
+
 ## Idempotency
 
-- Wallet Service — проверяет payment_id в wallet_transactions. Если резерв уже создан, возвращает существующий.
-- Transaction Service — проверяет payment_id в payments. Если платёж уже есть, не вызывает провайдера повторно.
-- Callback Service — проверяет provider_txn_id в callbacks. Если callback уже обработан, не пишет в outbox.
+Все проверки идемпотентности хранят состояние в PostgreSQL. Логика проверки — на уровне приложения.
+
+- Wallet Service — `SELECT ... WHERE payment_id = ? AND type = 'RESERVE'` перед созданием резерва. Если найдено — возвращает существующий результат. 
+- Transaction Service — UNIQUE constraint на `payment_id` в таблице payments. При дубликате INSERT падает, сервис возвращает существующий статус.
+- Callback Service — UNIQUE constraint на `provider_txn_id` в таблице callbacks. Дубликат callback игнорируется.
 
 ## CQRS
 
