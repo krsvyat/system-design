@@ -1,0 +1,44 @@
+@startuml c3-payment
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Payment Service - Component Diagram (C3)
+
+Container(antifraud, "Anti-Fraud Service", "", "")
+ContainerQueue(kafka, "Kafka", "", "")
+ContainerDb(db, "Payment DB", "PostgreSQL", "")
+Container(cdc, "Kafka Connect", "Debezium", "")
+System_Ext(cards, "Card Networks", "Visa, MC, MIR")
+System_Ext(banks, "Other Banks", "SBP, SWIFT")
+
+Container_Boundary(payment, "Payment Service") {
+    Component(event_handler, "Event Handler", "Kafka Listener", "PaymentInitiated, ProviderCallbackReceived")
+    Component(command, "Command Handler", "Service", "Payment lifecycle, state transitions")
+    Component(card_adapter, "Card Adapter", "HTTP Client", "ISO 8583")
+    Component(bank_adapter, "Bank Adapter", "HTTP Client", "SBP, SWIFT")
+    Component(scheduler, "Timeout Scheduler", "Scheduled Job", "Handles payment timeouts")
+}
+
+' Kafka -> Payment
+Rel_D(kafka, event_handler, "PaymentInitiated, ProviderCallbackReceived")
+
+' Internal flow
+Rel_D(event_handler, command, "calls")
+Rel_R(command, antifraud, "gRPC", "check payment risk")
+Rel_D(command, card_adapter, "card payments")
+Rel_D(command, bank_adapter, "bank transfers")
+Rel_D(command, db, "writes payment + outbox")
+
+' External providers
+Rel_D(card_adapter, cards, "ISO 8583")
+Rel_D(bank_adapter, banks, "SWIFT/SBP")
+
+' Scheduler
+Rel_D(scheduler, command, "handleTimeout")
+
+' CDC
+Rel_U(cdc, db, "reads WAL")
+Rel_U(cdc, kafka, "PaymentCompleted, PaymentFailed")
+
+SHOW_LEGEND()
+
+@enduml

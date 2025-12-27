@@ -1,0 +1,168 @@
+@startuml c2
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_TOP_DOWN()
+HIDE_STEREOTYPE()
+
+' Layout tuning
+skinparam nodesep 100
+skinparam ranksep 100
+
+title Container Diagram - Payment Platform
+
+Person(user, "Customer", "")
+
+' === Clients ===
+Rectangle "Clients" {
+    Container(mobile, "Mobile App", "iOS/Android", "")
+    Container(web, "Web App", "React", "")
+}
+
+System_Boundary(platform, "Payment Platform") {
+
+    ' === Entry Layer ===
+    Container(gateway, "API Gateway", "Kong", "Auth, routing")
+    Container(bff, "BFF", "Ktor", "Client API, orchestration")
+
+    ' === Bounded Contexts ===
+    Boundary(wallet_ctx, "Wallet Context") {
+        Container(wallet, "Wallet Service", "Spring Boot", "Reserve/Commit/Release")
+        ContainerDb(wallet_db, "Wallet DB", "PostgreSQL", "")
+        ContainerDb(wallet_cache, "Cache", "Redis", "")
+    }
+
+    Boundary(payment_ctx, "Payment Context") {
+        Container(payment, "Payment Service", "Spring Boot", "Payment lifecycle")
+        Container(card_adapter, "Card Adapter", "", "ISO 8583")
+        Container(bank_adapter, "Bank Adapter", "", "SBP, SWIFT")
+        ContainerDb(payment_db, "Payment DB", "PostgreSQL", "")
+    }
+
+    Boundary(query_ctx, "Query Context") {
+        Container(query, "Query Service", "Spring Boot", "CQRS read model")
+        ContainerDb(query_db, "Query DB", "PostgreSQL", "")
+    }
+
+    Boundary(callbacks_ctx, "Callbacks Context") {
+        Container(callbacks, "Callbacks Service", "", "Webhook delivery to merchants")
+        ContainerDb(callbacks_db, "Callbacks DB", "PostgreSQL", "")
+    }
+
+    Boundary(auth_ctx, "Auth Context") {
+        Container(auth, "Auth Service", "Go", "Login, MFA")
+        ContainerDb(auth_db, "Auth DB", "PostgreSQL", "")
+        ContainerDb(auth_cache, "Cache", "Redis", "")
+    }
+
+    Boundary(customer_ctx, "Customer Context") {
+        Container(customer, "Customer Service", "", "KYC")
+        ContainerDb(customer_db, "Customer DB", "PostgreSQL", "")
+        ContainerDb(customer_cache, "Cache", "Redis", "")
+    }
+
+    Boundary(antifraud_ctx, "Anti-Fraud Context") {
+        Container(antifraud, "Anti-Fraud Service", "", "Risk scoring")
+        Container(antifraud_ml, "ML Scoring", "Python/FastAPI", "Fraud detection")
+        ContainerDb(antifraud_db, "Anti-Fraud DB", "PostgreSQL", "Rules, blacklists")
+        ContainerDb(antifraud_models, "Model Registry", "MLflow", "")
+        ContainerDb(antifraud_events, "Events Store", "ClickHouse", "")
+    }
+
+    Boundary(notification_ctx, "Notification Context") {
+        Container(notification, "Notification Service", "Go", "SMS, Push, Email")
+        ContainerDb(notification_cache, "Cache", "Redis", "Rate limiting, dedup")
+    }
+
+    Boundary(core_banking_ctx, "Core Banking Context") {
+        Container(core_acl, "Core Banking ACL", "", "Maps domain to legacy")
+        Container(core, "Core Banking", "COBOL", "Ledger, accounting entries")
+        ContainerDb(core_db, "Core DB", "IBM DB2", "")
+    }
+
+    ' === Infrastructure ===
+    ContainerQueue(kafka, "Kafka", "", "Events")
+    Container(cdc, "Kafka Connect", "Debezium", "CDC")
+}
+
+' === Relationships ===
+
+' User flow
+Rel_D(user, mobile, "")
+Rel_D(user, web, "")
+Rel_D(mobile, gateway, "HTTPS")
+Rel_D(web, gateway, "HTTPS")
+Rel_D(gateway, bff, "HTTP")
+Rel_D(gateway, auth, "gRPC", "validate token")
+Rel_D(gateway, payment, "HTTP", "provider callbacks")
+
+' BFF to services (sync HTTP)
+Rel_D(bff, wallet, "HTTP", "reserve funds")
+Rel_D(bff, query, "HTTP", "get status")
+Rel_D(bff, customer, "HTTP")
+
+' Payment flow
+Rel_D(wallet, antifraud, "gRPC", "check risk")
+Rel_D(auth, antifraud, "gRPC", "check login risk")
+Rel_D(payment, antifraud, "gRPC", "check payment risk")
+Rel_D(payment, card_adapter, "HTTP")
+Rel_D(payment, bank_adapter, "HTTP")
+
+' External: Card Networks, Other Banks (под Payment Context)
+System_Ext(cards, "Card Networks", "Visa, MC, MIR")
+System_Ext(banks, "Other Banks", "SBP, SWIFT")
+Rel_D(card_adapter, cards, "ISO 8583")
+Rel_D(bank_adapter, banks, "SWIFT/SBP")
+
+' Service -> DB/Cache
+Rel_D(wallet, wallet_db, "")
+Rel_D(wallet, wallet_cache, "")
+Rel_D(payment, payment_db, "")
+Rel_D(query, query_db, "")
+Rel_D(callbacks, callbacks_db, "")
+Rel_D(auth, auth_db, "")
+Rel_D(auth, auth_cache, "")
+Rel_D(customer, customer_db, "")
+Rel_D(customer, customer_cache, "")
+Rel_D(antifraud, antifraud_db, "")
+Rel_D(antifraud, antifraud_ml, "HTTP")
+Rel_D(antifraud_ml, antifraud_models, "")
+Rel_D(antifraud_ml, antifraud_events, "")
+Rel_D(antifraud, customer, "gRPC", "get risk profile")
+Rel_D(notification, notification_cache, "")
+Rel_D(core, core_db, "")
+
+' Outbox -> Kafka Connect -> Kafka
+Rel_D(wallet_db, cdc, "outbox")
+Rel_D(payment_db, cdc, "outbox")
+Rel_D(customer_db, cdc, "outbox")
+Rel_D(cdc, kafka, "")
+
+' Kafka events (with event names)
+Rel_D(kafka, payment, "PaymentInitiated")
+Rel_D(kafka, wallet, "PaymentCompleted/Failed, CustomerCreated")
+Rel_D(kafka, query, "all events")
+Rel_D(kafka, notification, "PaymentCompleted, BalanceChanged")
+Rel_D(kafka, callbacks, "PaymentCompleted")
+Rel_D(kafka, core_acl, "PaymentCompleted")
+
+' External: DWH (под Kafka)
+System_Ext(dwh, "DWH", "Analytics")
+Rel_D(kafka, dwh, "all events")
+
+' External: Merchants (под Callbacks)
+System_Ext(merchants, "Merchants", "")
+Rel_D(callbacks, merchants, "webhook")
+
+' External: SMS/Push/Email (под Notification)
+System_Ext(notif_ext, "SMS/Push/Email", "")
+Rel_D(notification, notif_ext, "")
+Rel_D(auth, notification, "async", "send OTP")
+
+' External: Central Bank (под Core Banking)
+System_Ext(central_bank, "Central Bank", "")
+Rel_D(core_acl, core, "IBM MQ")
+Rel_D(core_acl, central_bank, "batch reporting")
+
+SHOW_LEGEND()
+
+@enduml

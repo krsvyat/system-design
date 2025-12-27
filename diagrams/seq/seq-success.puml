@@ -1,0 +1,65 @@
+@startuml seq-success
+title Payment Flow - Success Scenario
+
+participant User
+participant BFF
+participant Wallet
+participant "Wallet DB" as WalletDB
+participant "Kafka Connect" as KC
+participant Kafka
+participant Transaction
+participant "Payment DB" as TxDB
+participant "Provider\n<<external>>" as Provider
+participant Gateway
+participant Callback
+participant "Callback DB" as CallbackDB
+participant Query
+participant "Query DB" as QueryDB
+
+== Reserve Funds ==
+
+User -> BFF: POST /payments
+BFF -> Wallet: POST /wallets/{walletId}/reservations
+Wallet -> WalletDB: write transaction (RESERVED)\n+ outbox (PaymentInitiated)
+Wallet --> BFF: paymentId
+BFF --> User: 202 Accepted
+
+== Publish Event (CDC) ==
+
+KC -> WalletDB: read WAL
+KC -> Kafka: PaymentInitiated
+
+== Process Payment ==
+
+Kafka -> Transaction: PaymentInitiated
+Transaction -> TxDB: write payment (PROCESSING)
+Transaction -> Provider: POST /payments
+Provider --> Transaction: 202 Accepted
+Transaction -> TxDB: save providerTxnId, status=PROCESSING
+
+== Provider Callback ==
+
+Provider -> Gateway: POST /callbacks
+Gateway -> Callback: POST /callbacks
+Callback -> CallbackDB: save callback + outbox (ProviderCallbackReceived)
+KC -> CallbackDB: read WAL
+KC -> Kafka: ProviderCallbackReceived
+Kafka -> Transaction: ProviderCallbackReceived
+Transaction -> TxDB: update (COMPLETED)\n+ outbox (PaymentCompleted)
+
+== Complete Payment (CDC) ==
+
+KC -> TxDB: read WAL
+KC -> Kafka: PaymentCompleted
+
+== Commit Funds ==
+
+Kafka -> Wallet: PaymentCompleted
+Wallet -> WalletDB: commit funds (COMPLETED)
+
+== Update Read Model ==
+
+Kafka -> Query: PaymentCompleted
+Query -> QueryDB: update projection
+
+@enduml

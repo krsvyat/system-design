@@ -1,0 +1,42 @@
+@startuml c3-wallet
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Wallet Service - Component Diagram (C3)
+
+Container(bff, "BFF", "", "")
+Container(antifraud, "Anti-Fraud Service", "", "")
+ContainerQueue(kafka, "Kafka", "", "")
+ContainerDb(db, "Wallet DB", "PostgreSQL", "")
+ContainerDb(cache, "Cache", "Redis", "")
+Container(cdc, "Kafka Connect", "Debezium", "")
+
+Container_Boundary(wallet, "Wallet Service") {
+    Component(api, "API Controller", "REST", "HTTP endpoints")
+    Component(command, "Command Handler", "Service", "reserve, commit, release")
+    Component(event_handler, "Event Handler", "Kafka Listener", "PaymentCompleted, PaymentFailed, CustomerCreated")
+    Component(balance_reader, "Balance Reader", "Service", "Cached balance queries")
+}
+
+' External -> Wallet
+Rel_D(bff, api, "HTTP", "reserve")
+Rel_D(api, command, "calls")
+
+' Anti-Fraud check
+Rel_R(command, antifraud, "gRPC", "check risk")
+
+' Internal flow
+Rel_D(command, db, "writes wallet + outbox")
+Rel_D(event_handler, command, "commit / release")
+Rel_D(balance_reader, cache, "reads")
+Rel_D(command, cache, "invalidates")
+
+' Kafka integration
+Rel_L(kafka, event_handler, "PaymentCompleted, PaymentFailed, CustomerCreated")
+
+' CDC
+Rel_U(cdc, db, "reads WAL")
+Rel_U(cdc, kafka, "PaymentInitiated, BalanceChanged")
+
+SHOW_LEGEND()
+
+@enduml
