@@ -9,17 +9,30 @@ entity "wallets" {
   * reserved : bigint
   * currency : text
   * created_at : timestamptz
+  * updated_at : timestamptz
+  --
+  <<CHECK>> balance >= 0
+  <<CHECK>> reserved >= 0
+  <<CHECK>> reserved <= balance
+  --
+  <<INDEX>> idx_wallets_user_id (user_id)
 }
 
-entity "wallet_transactions" {
+entity "reservations" {
   * id : uuid <<PK>>
   --
+  * payment_id : uuid <<UNIQUE>>
   * wallet_id : uuid <<FK>>
-  * payment_id : uuid
   * amount : bigint
-  * type : text
   * status : text
   * created_at : timestamptz
+  * committed_at : timestamptz
+  * released_at : timestamptz
+  --
+  <<CHECK>> amount > 0
+  <<CHECK>> status IN ('RESERVED', 'COMMITTED', 'RELEASED')
+  --
+  <<INDEX>> idx_reservations_wallet_id (wallet_id)
 }
 
 entity "wallet_outbox" {
@@ -29,8 +42,9 @@ entity "wallet_outbox" {
   * event_type : text
   * payload : jsonb
   * created_at : timestamptz
+  * published_at : timestamptz
 }
 
-wallets ||--o{ wallet_transactions
+wallets ||--o{ reservations
 
 @enduml

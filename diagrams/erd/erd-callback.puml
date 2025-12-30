@@ -4,10 +4,12 @@ hide circle
 entity "callbacks" {
   * id : uuid <<PK>>
   --
-  * provider_txn_id : text
+  * provider_txn_id : text <<UNIQUE>>
   * status : text
   * raw_payload : jsonb
   * received_at : timestamptz
+  --
+  <<CHECK>> status IN ('SUCCESS', 'FAILED')
 }
 
 entity "callback_outbox" {
@@ -17,6 +19,7 @@ entity "callback_outbox" {
   * event_type : text
   * payload : jsonb
   * created_at : timestamptz
+  * published_at : timestamptz
 }
 
 @enduml

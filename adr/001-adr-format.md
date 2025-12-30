@@ -1,70 +1,65 @@
-# ADR-001: Use ADR format for architecture decisions
+# ADR-001: Формат ADR для архитектурных решений
 
-## Status
+## Статус
 
-Accepted
+Принято
 
-## Context
+## Контекст
 
-We need a consistent way to document architecture decisions in the project. Decisions made without documentation are easily forgotten, misunderstood, or reversed without understanding the original reasoning.
+Нужен единый способ документировать архитектурные решения. Решения без документации легко забываются или отменяются без понимания изначальных причин.
 
-Requirements:
+Требования:
 
-- Lightweight format that lives in the repository
-- Easy to write and read
-- Captures the "why" behind decisions
-- Tracks decision lifecycle (proposed → accepted → superseded)
+- Лёгкий формат, живёт в репозитории
+- Просто писать и читать
+- Фиксирует "почему", а не только "что"
+- Отслеживает жизненный цикл (Предложено → Принято → Заменено)
 
-## Decision
+## Решение
 
-We will use Architecture Decision Records (ADR) in the format proposed by [Michael Nygard](https://www.cognitect.com/blog/2011/11/15/documenting-architecture-decisions).
+Используем Architecture Decision Records (ADR) в формате [Michael Nygard](https://www.cognitect.com/blog/2011/11/15/documenting-architecture-decisions).
 
-### Format
+### Формат
 
-Each ADR is a markdown file with the following structure:
+Каждый ADR — markdown файл со структурой:
 
-| Section          | Purpose                                                               |
-| ---------------- | --------------------------------------------------------------------- |
-| **Title**        | `ADR-XXX: Short decision description`                                 |
-| **Status**       | `Proposed` / `Accepted` / `Deprecated` / `Superseded by ADR-XXX`      |
-| **Context**      | What is the issue? What forces are at play? Why do we need to decide? |
-| **Decision**     | What is our decision? Be specific.                                    |
-| **Consequences** | What are the results? Both positive and negative.                     |
+| Секция          | Назначение                                                 |
+| --------------- | ---------------------------------------------------------- |
+| **Заголовок**   | `ADR-XXX: Краткое описание решения`                        |
+| **Статус**      | `Предложено` / `Принято` / `Устарело` / `Заменено ADR-XXX` |
+| **Контекст**    | В чём проблема? Какие силы влияют? Почему нужно решение?   |
+| **Решение**     | Что решили? Конкретно.                                     |
+| **Последствия** | Результаты — положительные и отрицательные.                |
 
-### File naming
+### Именование файлов
 
 ```
 adr/
 ├── 001-adr-format.md
-├── 002-bounded-context-boundaries.md
-├── 003-event-driven-communication.md
+├── 002-auth-service.md
+├── 003-choreography-over-orchestration.md
 └── ...
 ```
 
-Format: `XXX-<short-name>.md` where XXX is a sequential number.
+Формат: `XXX-<short-name>.md`, где XXX — порядковый номер.
 
-### Guidelines
+### Правила
 
-- One decision per ADR
-- 1-2 pages maximum
-- Write for a future developer who doesn't know the context
-- Numbers are never reused
-- Old decisions are marked superseded, not deleted
+- Одно решение на ADR
+- Максимум 1-2 страницы
+- Пишем для разработчика, который не знает контекст
+- Номера не переиспользуются
+- Старые решения помечаем как заменённые, не удаляем
 
-## Consequences
+## Последствия
 
-**Positive:**
+**Положительные:**
 
-- Decisions are documented and searchable
-- New team members understand historical context
-- Prevents re-discussing already decided topics
-- Lives with the code in version control
+- Решения задокументированы и легко искать
+- Новые члены команды понимают исторический контекст
+- Не обсуждаем заново уже принятые решения
 
-**Negative:**
+**Отрицательные:**
 
-- Overhead to write ADRs for every decision
-- Risk of ADRs becoming outdated if not maintained
-
-**Neutral:**
-
-- Team needs to agree on what qualifies as an "architecture decision"
+- Накладные расходы на написание ADR
+- Риск устаревания если не поддерживать

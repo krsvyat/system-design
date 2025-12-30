@@ -2,15 +2,23 @@
 hide circle
 
 entity "payments" {
-  * id : uuid <<PK>>
+  * payment_id : uuid <<PK>>
   --
-  * payment_id : uuid
+  * wallet_id : uuid
   * provider_txn_id : text
   * amount : bigint
   * currency : text
   * status : text
   * error_code : text
   * created_at : timestamptz
+  * updated_at : timestamptz
+  * timeout_at : timestamptz
+  * retry_count : int
+  --
+  <<CHECK>> amount > 0
+  <<CHECK>> status IN ('PROCESSING', 'COMPLETED', 'FAILED')
+  --
+  <<INDEX>> idx_payments_provider_txn_id (provider_txn_id)
 }
 
 entity "payment_outbox" {
@@ -20,6 +28,7 @@ entity "payment_outbox" {
   * event_type : text
   * payload : jsonb
   * created_at : timestamptz
+  * published_at : timestamptz
 }
 
 @enduml

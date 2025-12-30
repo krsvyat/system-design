@@ -12,7 +12,22 @@ entity "payment_projections" {
   * error_code : text
   * provider_txn_id : text
   * created_at : timestamptz
+  * updated_at : timestamptz
   * completed_at : timestamptz
+  --
+  <<INDEX>> idx_projections_user_id (user_id)
+  <<INDEX>> idx_projections_wallet_id (wallet_id)
+  <<INDEX>> idx_projections_status (status)
+  <<INDEX>> idx_projections_created_at (created_at DESC)
+}
+
+entity "processed_events" {
+  * event_id : uuid <<PK>>
+  --
+  * processed_at : timestamptz
+  --
+  <<INDEX>> idx_processed_events_ttl (processed_at)
+  <<COMMENT>> TTL: cleanup after 7 days
 }
 
 @enduml

@@ -1,28 +1,28 @@
 @startuml seq-success
 title Payment Flow - Success Scenario
 
-participant User
+participant Customer
 participant BFF
 participant Wallet
 participant "Wallet DB" as WalletDB
 participant "Kafka Connect" as KC
 participant Kafka
-participant Transaction
-participant "Payment DB" as TxDB
+participant Payment
+participant "Payment DB" as PaymentDB
+participant "Anti-Fraud" as AntiFraud
 participant "Provider\n<<external>>" as Provider
-participant Gateway
-participant Callback
+participant "Callback Service" as Callback
 participant "Callback DB" as CallbackDB
 participant Query
 participant "Query DB" as QueryDB
 
-== Reserve Funds ==
+== Reserve ==
 
-User -> BFF: POST /payments
+Customer -> BFF: POST /payments
 BFF -> Wallet: POST /wallets/{walletId}/reservations
 Wallet -> WalletDB: write transaction (RESERVED)\n+ outbox (PaymentInitiated)
 Wallet --> BFF: paymentId
-BFF --> User: 202 Accepted
+BFF --> Customer: 202 Accepted
 
 == Publish Event (CDC) ==
 
@@ -31,31 +31,32 @@ KC -> Kafka: PaymentInitiated
 
 == Process Payment ==
 
-Kafka -> Transaction: PaymentInitiated
-Transaction -> TxDB: write payment (PROCESSING)
-Transaction -> Provider: POST /payments
-Provider --> Transaction: 202 Accepted
-Transaction -> TxDB: save providerTxnId, status=PROCESSING
+Kafka -> Payment: PaymentInitiated
+Payment -> PaymentDB: write payment (PROCESSING)
+Payment -> AntiFraud: check risk (gRPC)
+AntiFraud --> Payment: ALLOW
+Payment -> Provider: POST /payments
+Provider --> Payment: 202 Accepted {providerTxnId}
+Payment -> PaymentDB: save providerTxnId, status=PROCESSING
 
 == Provider Callback ==
 
-Provider -> Gateway: POST /callbacks
-Gateway -> Callback: POST /callbacks
+Provider -> Callback: POST /callbacks
 Callback -> CallbackDB: save callback + outbox (ProviderCallbackReceived)
 KC -> CallbackDB: read WAL
 KC -> Kafka: ProviderCallbackReceived
-Kafka -> Transaction: ProviderCallbackReceived
-Transaction -> TxDB: update (COMPLETED)\n+ outbox (PaymentCompleted)
+Kafka -> Payment: ProviderCallbackReceived
+Payment -> PaymentDB: update (COMPLETED)\n+ outbox (PaymentCompleted)
 
 == Complete Payment (CDC) ==
 
-KC -> TxDB: read WAL
+KC -> PaymentDB: read WAL
 KC -> Kafka: PaymentCompleted
 
-== Commit Funds ==
+== Commit ==
 
 Kafka -> Wallet: PaymentCompleted
-Wallet -> WalletDB: commit funds (COMPLETED)
+Wallet -> WalletDB: commit (COMPLETED)
 
 == Update Read Model ==
 

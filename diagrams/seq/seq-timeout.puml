@@ -1,0 +1,99 @@
+@startuml seq-timeout
+title Payment Flow - Timeout Scenario
+
+participant Customer
+participant BFF
+participant Wallet
+participant "Wallet DB" as WalletDB
+participant "Kafka Connect" as KC
+participant Kafka
+participant Payment
+participant "Payment DB" as PaymentDB
+participant "Anti-Fraud" as AntiFraud
+participant "Provider\n<<external>>" as Provider
+participant Query
+participant "Query DB" as QueryDB
+
+== Reserve ==
+
+Customer -> BFF: POST /payments
+BFF -> Wallet: POST /wallets/{walletId}/reservations
+Wallet -> WalletDB: write transaction (RESERVED)\n+ outbox (PaymentInitiated)
+Wallet --> BFF: paymentId
+BFF --> Customer: 202 Accepted
+
+== Publish Event (CDC) ==
+
+KC -> WalletDB: read WAL
+KC -> Kafka: PaymentInitiated
+
+== Process Payment ==
+
+Kafka -> Payment: PaymentInitiated
+Payment -> PaymentDB: write payment (PROCESSING)
+Payment -> AntiFraud: check risk (gRPC)
+AntiFraud --> Payment: ALLOW
+Payment -> Provider: POST /payments
+Provider --> Payment: 202 Accepted {providerTxnId}
+Payment -> PaymentDB: save providerTxnId
+
+== Timeout: No Callback ==
+
+note over Payment, Provider
+  No callback received (10 min timeout)
+end note
+
+Payment -> PaymentDB: set timeout_at = now()
+
+== Check Status API ==
+
+Payment -> Provider: GET /transactions/{providerTxnId}/status
+
+alt Status: SUCCESS
+    Provider --> Payment: status: SUCCESS
+    Payment -> PaymentDB: update (COMPLETED)\n+ outbox (PaymentCompleted)
+
+else Status: FAILED
+    Provider --> Payment: status: FAILED
+    Payment -> PaymentDB: update (FAILED)\n+ outbox (PaymentFailed)
+
+else Status: PENDING
+    Provider --> Payment: status: PENDING
+    Payment -> PaymentDB: retry_count++
+    note right: Retry: 5m → 15m → 1h → 6h → 1d
+
+else Status API unavailable
+    Provider --> Payment: timeout / 5xx
+    Payment -> PaymentDB: retry_count++
+end
+
+== After 7 days PENDING: Timeout Reversal ==
+
+Payment -> Provider: POST /reversals/{providerTxnId}
+
+alt Reversal success
+    Provider --> Payment: 200 OK (reversed)
+    Payment -> PaymentDB: update (FAILED)\n+ outbox (PaymentFailed)
+
+else Reversal failed
+    Provider --> Payment: 400 / timeout
+    Payment -> PaymentDB: retry_count++
+    note right: After 30 days → auto FAILED
+end
+
+== Publish Event (CDC) ==
+
+KC -> PaymentDB: read WAL
+KC -> Kafka: PaymentCompleted / PaymentFailed
+
+== Commit or Release ==
+
+Kafka -> Wallet: event
+Wallet -> WalletDB: commit or release
+
+== Update Read Model ==
+
+Kafka -> Query: event
+Query -> QueryDB: update projection
+
+@enduml

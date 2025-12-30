@@ -1,0 +1,32 @@
+@startuml erd-merchant-callback
+hide circle
+
+entity "merchant_callback_configs" {
+  * id : uuid <<PK>>
+  --
+  * merchant_id : uuid
+  * url : text
+  * secret : text
+  * events : text[]
+  * is_active : boolean
+  * created_at : timestamptz
+}
+
+entity "merchant_callback_deliveries" {
+  * id : uuid <<PK>>
+  --
+  * config_id : uuid <<FK>>
+  * payment_id : uuid
+  * event_type : text
+  * payload : jsonb
+  * status : text
+  * attempts : int
+  * last_attempt_at : timestamptz
+  * created_at : timestamptz
+  --
+  <<CHECK>> status IN ('PENDING', 'DELIVERED', 'FAILED')
+}
+
+merchant_callback_configs ||--o{ merchant_callback_deliveries : "has"
+
+@enduml
