@@ -1,4 +1,5 @@
 @startuml erd-query
+!theme plain
 hide circle
 
 entity "payment_projections" {

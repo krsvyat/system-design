@@ -1,0 +1,87 @@
+@startuml c2-queues
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_TOP_DOWN()
+HIDE_STEREOTYPE()
+
+skinparam nodesep 30
+skinparam ranksep 50
+
+title C2: Kafka Topics & DLQ
+
+' === Layer 1: Publishers ===
+Rectangle "Publishers" as pub {
+    Container(wallet, "Wallet", "", "")
+    Container(payment, "Payment", "", "")
+    Container(callback, "Callback", "", "")
+    Container(notification_pub, "Notification", "", "")
+    Container(customer, "Customer", "", "")
+}
+
+' === Layer 2: Topics ===
+Rectangle "Kafka Topics" as topics {
+    ContainerQueue(initiated, "payments.initiated", "", "")
+    ContainerQueue(completed, "payments.completed", "", "")
+    ContainerQueue(failed, "payments.failed", "", "")
+    ContainerQueue(retry, "payments.retry", "", "")
+    ContainerQueue(merchant, "merchant.callbacks", "", "")
+    ContainerQueue(callbacks_topic, "callbacks.received", "", "")
+    ContainerQueue(notifications_retry, "notifications.retry", "", "")
+    ContainerQueue(customer_events, "customer-events", "", "")
+}
+
+' === Layer 3: Consumers ===
+Rectangle "Consumers" as cons {
+    Container(payment_c, "Payment", "", "")
+    Container(wallet_c, "Wallet", "", "")
+    Container(query, "Query", "", "")
+    Container(notification, "Notification", "", "")
+    Container(merchant_cb, "Merchant Callback", "", "")
+}
+
+' === Layer 4: DLQ ===
+Rectangle "Dead Letter Queues" as dlq {
+    ContainerQueue(initiated_dlq, "payments.initiated.dlq", "", "")
+    ContainerQueue(completed_dlq, "payments.completed.dlq", "", "")
+    ContainerQueue(failed_dlq, "payments.failed.dlq", "", "")
+    ContainerQueue(retry_dlq, "payments.retry.dlq", "", "")
+    ContainerQueue(merchant_dlq, "merchant.callbacks.dlq", "", "")
+    ContainerQueue(callbacks_dlq, "callbacks.received.dlq", "", "")
+    ContainerQueue(notifications_retry_dlq, "notifications.retry.dlq", "", "")
+}
+
+' === Publish ===
+Rel_D(wallet, initiated, "PaymentInitiated")
+Rel_D(payment, completed, "PaymentCompleted")
+Rel_D(payment, failed, "PaymentFailed")
+Rel_D(payment, retry, "RetryPayment")
+Rel_D(payment, merchant, "MerchantCallbackRequested")
+Rel_D(callback, callbacks_topic, "ProviderCallbackReceived")
+Rel_D(notification_pub, notifications_retry, "RetryNotification")
+Rel_D(customer, customer_events, "CustomerCreated")
+
+' === Consume ===
+Rel_D(initiated, payment_c, "")
+Rel_D(initiated, query, "")
+Rel_D(completed, wallet_c, "")
+Rel_D(completed, query, "")
+Rel_D(completed, notification, "")
+Rel_D(failed, wallet_c, "")
+Rel_D(failed, query, "")
+Rel_D(failed, notification, "")
+Rel_D(retry, payment_c, "")
+Rel_D(callbacks_topic, payment_c, "")
+Rel_D(merchant, merchant_cb, "")
+Rel_D(notifications_retry, notification, "")
+Rel_D(customer_events, wallet_c, "")
+
+' === DLQ ===
+Rel_D(initiated, initiated_dlq, "")
+Rel_D(completed, completed_dlq, "")
+Rel_D(failed, failed_dlq, "")
+Rel_D(retry, retry_dlq, "")
+Rel_D(merchant, merchant_dlq, "")
+Rel_D(callbacks_topic, callbacks_dlq, "")
+Rel_D(notifications_retry, notifications_retry_dlq, "")
+
+@enduml

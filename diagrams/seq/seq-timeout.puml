@@ -1,7 +1,9 @@
 @startuml seq-timeout
+!theme plain
+
 title Payment Flow - Timeout Scenario
 
-participant Customer
+participant "Client" as Customer
 participant BFF
 participant Wallet
 participant "Wallet DB" as WalletDB

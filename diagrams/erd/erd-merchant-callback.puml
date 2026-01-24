@@ -1,4 +1,5 @@
 @startuml erd-merchant-callback
+!theme plain
 hide circle
 
 entity "merchant_callback_configs" {

@@ -1,0 +1,68 @@
+@startuml seq-tracing
+!theme plain
+
+title Payment Flow with Distributed Tracing
+
+participant "Client" as Customer
+participant "API Gateway" as gateway
+participant BFF
+participant "Wallet Service" as wallet
+participant "Payment Service" as payment
+participant "Provider" as provider
+participant "Callback Service" as callback
+participant "Query Service" as query
+
+== Create Payment ==
+
+Customer -> gateway: POST /payments
+activate gateway
+note right of gateway
+  Generate trace_id: abc123
+end note
+
+gateway -> BFF: traceparent: 00-abc123-...
+activate BFF
+
+BFF -> wallet: traceparent: 00-abc123-...
+activate wallet
+
+wallet --> BFF: 201 {reservationId}
+deactivate wallet
+
+BFF --> gateway: 202 {paymentId}
+deactivate BFF
+
+gateway --> Customer: 202 Accepted
+deactivate gateway
+
+== Async Processing ==
+
+wallet -> payment: Kafka: PaymentInitiated\nheaders: {trace_id: abc123}
+activate payment
+
+payment -> provider: POST /authorize\ntraceparent: 00-abc123-...
+activate provider
+
+provider --> payment: 202 {providerTxnId}
+deactivate provider
+
+payment --> payment: status = PROCESSING
+deactivate payment
+
+== Callback ==
+
+provider -> callback: POST /callback {providerTxnId}
+activate callback
+note right of callback
+  Lookup trace_id by providerTxnId
+end note
+
+callback -> payment: Kafka: ProviderCallbackReceived\nheaders: {trace_id: abc123}
+deactivate callback
+
+activate payment
+payment -> wallet: Kafka: PaymentCompleted\nheaders: {trace_id: abc123}
+payment -> query: Kafka: PaymentCompleted\nheaders: {trace_id: abc123}
+deactivate payment
+
+@enduml

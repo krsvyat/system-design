@@ -1,5 +1,36 @@
 # API
 
+## Аутентификация и авторизация
+
+**External (Client → Gateway):**
+
+```
+Authorization: Bearer {JWT}
+```
+
+**Internal (BFF → Services):**
+
+```
+X-Customer-ID: {customer_id}
+```
+
+**Flow:**
+
+1. Client шлёт JWT в `Authorization` header
+2. API Gateway валидирует подпись и срок действия (401 если невалидный)
+3. BFF извлекает `customer_id` из JWT payload (`sub` claim)
+4. BFF ставит `X-Customer-ID` header для внутренних сервисов
+5. BFF проверяет что `walletId` принадлежит `customer_id` (403 если нет)
+
+**JWT payload:**
+
+```json
+{
+  "sub": "cust_12345",
+  "exp": 1234567890
+}
+```
+
 ## External API (BFF)
 
 ### Create Payment
@@ -9,6 +40,7 @@ POST /payments
 ```
 
 Request:
+
 ```json
 {
   "walletId": "uuid",
@@ -23,6 +55,7 @@ Request:
 ```
 
 Response `202 Accepted`:
+
 ```json
 {
   "paymentId": "uuid",
@@ -37,6 +70,7 @@ GET /payments/{paymentId}
 ```
 
 Response `200 OK`:
+
 ```json
 {
   "paymentId": "uuid",
@@ -61,6 +95,7 @@ GET /payments?walletId={walletId}&limit=20&offset=0
 ```
 
 Response `200 OK`:
+
 ```json
 {
   "payments": [...],
@@ -81,6 +116,7 @@ POST /wallets/{walletId}/reservations
 ```
 
 Request:
+
 ```json
 {
   "paymentId": "uuid",
@@ -90,6 +126,7 @@ Request:
 ```
 
 Response `201 Created`:
+
 ```json
 {
   "reservationId": "uuid",
@@ -105,6 +142,7 @@ Response `201 Created`:
 ### Payment Service
 
 Не имеет HTTP эндпоинтов. Подписан на события:
+
 - `PaymentInitiated` → начать обработку
 - `ProviderCallbackReceived` → обновить статус
 
@@ -152,6 +190,7 @@ POST /callbacks
 ```
 
 Request (from Payment Provider):
+
 ```json
 {
   "providerTxnId": "uuid",
@@ -162,6 +201,7 @@ Request (from Payment Provider):
 ```
 
 Response `200 OK`:
+
 ```json
 {
   "received": true
@@ -179,6 +219,7 @@ POST /payments
 ```
 
 Request:
+
 ```json
 {
   "merchantId": "our-bank-id",
@@ -190,6 +231,7 @@ Request:
 ```
 
 Response `202 Accepted`:
+
 ```json
 {
   "providerTxnId": "provider-uuid",
@@ -204,6 +246,7 @@ GET /transactions/{providerTxnId}/status
 ```
 
 Response:
+
 ```json
 {
   "providerTxnId": "provider-uuid",

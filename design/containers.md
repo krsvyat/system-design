@@ -13,7 +13,7 @@
 - Валидация JWT токенов (проверка подписи, expiration)
 - Rate limiting per client/IP, защита от DDoS
 - Маршрутизация запросов к BFF или напрямую к сервисам
-- Генерация `X-Request-ID` для сквозного трейсинга
+- Генерация `traceparent` для distributed tracing
 - Логирование всех входящих запросов
 - TLS termination
 

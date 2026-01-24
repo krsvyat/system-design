@@ -42,11 +42,22 @@ Sync/async паттерны, события, топики.
 
 ## Топики
 
-| Топик             | Partition Key   | События                                           | Консьюмеры                                                                             |
-| ----------------- | --------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `payment-events`  | payment_id      | PaymentInitiated, PaymentCompleted, PaymentFailed | Payment, Query, Wallet, Notification, Merchant Callback, Core Banking, Anti-Fraud, DWH |
-| `callback-events` | provider_txn_id | ProviderCallbackReceived                          | Payment                                                                                |
-| `customer-events` | user_id         | CustomerCreated                                   | Wallet                                                                                 |
+| Топик                 | Partition Key   | События                   | Консьюмеры                  |
+| --------------------- | --------------- | ------------------------- | --------------------------- |
+| `payments.initiated`  | wallet_id       | PaymentInitiated          | Payment, Query              |
+| `payments.completed`  | payment_id      | PaymentCompleted          | Wallet, Query, Notification |
+| `payments.failed`     | payment_id      | PaymentFailed             | Wallet, Query, Notification |
+| `callbacks.received`  | provider_txn_id | ProviderCallbackReceived  | Payment                     |
+| `payments.retry`      | payment_id      | RetryPayment              | Payment                     |
+| `merchant.callbacks`  | merchant_id     | MerchantCallbackRequested | Merchant Callback           |
+| `notifications.retry` | user_id         | RetryNotification         | Notification                |
+| `customer-events`     | user_id         | CustomerCreated           | Wallet                      |
+
+**Почему отдельные топики вместо одного `payment-events`:**
+
+- Независимое масштабирование: можно добавить партиции только для `payments.initiated`
+- Возможность задать разный retention для каждого топика
+- Консьюмер подписывается только на нужные топики (Notification не получает PaymentInitiated)
 
 Kafka отправляет сообщения с одинаковым ключом в одну партицию. Внутри партиции порядок гарантирован.
 

@@ -1,0 +1,64 @@
+@startuml c2-observability
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_TOP_DOWN()
+HIDE_STEREOTYPE()
+
+skinparam nodesep 80
+skinparam ranksep 60
+
+title Observability Architecture
+
+' === Application Services ===
+Rectangle "Application Services" as apps {
+    Container(gateway, "API Gateway", "", "")
+    Container(bff, "BFF", "", "")
+    Container(wallet, "Wallet Service", "", "")
+    Container(payment, "Payment Service", "", "")
+    Container(callback, "Callback Service", "", "")
+    Container(query, "Query Service", "", "")
+}
+
+' === Collection ===
+Container(promtail, "Promtail", "DaemonSet", "Log shipper")
+
+' === Storage Layer ===
+Rectangle "Storage" as storage {
+    ContainerDb(prometheus, "Prometheus", "", "Metrics")
+    ContainerDb(loki, "Loki", "", "Logs")
+    ContainerDb(tempo, "Tempo", "", "Traces")
+}
+
+' === Visualization ===
+Container(grafana, "Grafana", "", "Dashboards")
+
+' === Alerting ===
+Container(alertmanager, "Alertmanager", "", "Alert routing")
+
+Person(oncall, "On-Call Engineer", "")
+
+' === Relationships ===
+
+' Metrics (pull)
+Rel_D(prometheus, apps, "scrape /metrics")
+
+' Logs (Promtail reads from node filesystem)
+Rel_D(promtail, apps, "read /var/log/pods")
+Rel_D(promtail, loki, "")
+
+' Traces (push)
+Rel_D(apps, tempo, "traces")
+
+' Grafana reads
+Rel_D(grafana, prometheus, "PromQL")
+Rel_D(grafana, loki, "LogQL")
+Rel_D(grafana, tempo, "TraceQL")
+
+' Alerting
+Rel_D(prometheus, alertmanager, "alerts")
+Rel_D(alertmanager, oncall, "notifications")
+
+' Engineer uses Grafana
+Rel_D(oncall, grafana, "investigate")
+
+@enduml

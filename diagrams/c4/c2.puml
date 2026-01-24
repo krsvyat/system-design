@@ -32,7 +32,6 @@ System_Boundary(platform, "Payment Platform") {
     Boundary(wallet_ctx, "Wallet Context") {
         Container(wallet, "Wallet Service", "Spring Boot", "Reserve/Commit/Release")
         ContainerDb(wallet_db, "Wallet DB", "PostgreSQL", "")
-        ContainerDb(wallet_cache, "Cache", "Redis", "")
     }
 
     Boundary(payment_ctx, "Payment Context") {
@@ -44,6 +43,7 @@ System_Boundary(platform, "Payment Platform") {
     Boundary(query_ctx, "Query Context") {
         Container(query, "Query Service", "Spring Boot", "CQRS read model")
         ContainerDb(query_db, "Query DB", "PostgreSQL", "")
+        ContainerDb(query_cache, "Cache", "Redis", "Payment history")
     }
 
     Boundary(notification_ctx, "Notification Context") {
@@ -62,13 +62,13 @@ System_Boundary(platform, "Payment Platform") {
     Boundary(auth_ctx, "Auth Context") {
         Container(auth, "Auth Service", "Go", "Login, MFA")
         ContainerDb(auth_db, "Auth DB", "PostgreSQL", "")
-        ContainerDb(auth_cache, "Cache", "Redis", "")
+        ContainerDb(auth_cache, "Cache", "Redis", "Sessions, tokens")
     }
 
     Boundary(customer_ctx, "Customer Context") {
         Container(customer, "Customer Service", "", "KYC")
         ContainerDb(customer_db, "Customer DB", "PostgreSQL", "")
-        ContainerDb(customer_cache, "Cache", "Redis", "")
+        ContainerDb(customer_cache, "Cache", "Redis", "KYC profile")
     }
 
     Boundary(antifraud_ctx, "Anti-Fraud Context") {
@@ -115,9 +115,9 @@ Rel_D(payment, providers, "ISO 8583, SWIFT")
 
 ' Service -> DB/Cache
 Rel_D(wallet, wallet_db, "")
-Rel_D(wallet, wallet_cache, "")
 Rel_D(payment, payment_db, "")
 Rel_D(query, query_db, "")
+Rel_D(query, query_cache, "")
 Rel_D(callbacks, callbacks_db, "")
 Rel_D(auth, auth_db, "")
 Rel_D(auth, auth_cache, "")

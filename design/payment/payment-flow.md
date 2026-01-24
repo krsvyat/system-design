@@ -4,12 +4,12 @@
 
 ## Saga: шаги и компенсации
 
-| Шаг         | Сервис   | Действие                         | Компенсация                         |
-| ----------- | -------- | -------------------------------- | ----------------------------------- |
-| 1. Reserve  | Wallet   | `reserved += amount`             | release: `reserved -= amount`       |
-| 2. Process  | Payment  | Вызов провайдера                 | — (провайдер определяет результат)  |
-| 3. Callback | Callback | Сохранить callback, опубликовать | — (нет состояния для компенсации)   |
-| 4. Complete | Wallet   | commit или release               | — (финальный шаг)                   |
+| Шаг         | Сервис   | Действие                         | Компенсация                        |
+| ----------- | -------- | -------------------------------- | ---------------------------------- |
+| 1. Reserve  | Wallet   | `reserved += amount`             | release: `reserved -= amount`      |
+| 2. Process  | Payment  | Вызов провайдера                 | — (провайдер определяет результат) |
+| 3. Callback | Callback | Сохранить callback, опубликовать | — (нет состояния для компенсации)  |
+| 4. Complete | Wallet   | commit или release               | — (финальный шаг)                  |
 
 - **Success:** Reserve → Process → Callback → Commit
 - **Failure:** Reserve → Process → Callback (failed) → Release
@@ -46,25 +46,31 @@ Failure может произойти на разных этапах:
 ### Anti-Fraud DENY
 
 1-5. Аналогично Success
+
 6. Payment Service → Anti-Fraud Service → **DENY**
 7. Payment Service обновляет `payments` (status=FAILED), пишет `PaymentFailed`
 8. Wallet Service: release (reserved -= amount)
 
 ### Provider недоступен
 
+![Sequence Diagram](../../diagrams/seq/seq-resilience.png)
+
 1-6. Аналогично Success
+
 7. Payment Service → External Provider:
-   - Timeout/5xx → retry до 3 раз с интервалом 1 сек
-   - Все retry неудачны → FAILED
-8. Payment Service обновляет `payments` (status=FAILED), пишет `PaymentFailed`
-9. Wallet Service: release (reserved -= amount)
+   - Timeout 30с (SLA провайдера) → retry с exponential backoff (1с → 2с → 4с)
+   - Если все sync retry неудачны → fallback в `payments.retry` топик
+   - Circuit Breaker открывается независимо, когда 50% последних 10 запросов к провайдеру failed
+
+8. Async retry (1м → 2м → 4м) — см. [resilience.md](resilience.md#payment--provider)
 
 ### Provider callback FAILED
 
-1-7. Аналогично Success
-8. Provider callback с status=FAILED
-9. Callback Service → `ProviderCallbackReceived` в Kafka
-10. Payment Service обновляет `payments` (status=FAILED), пишет `PaymentFailed`
+1-7. Аналогично Success 
+
+8. Provider callback с status=FAILED 
+9. Callback Service → `ProviderCallbackReceived` в Kafka 
+10. Payment Service обновляет `payments` (status=FAILED), пишет `PaymentFailed` 
 11. Wallet Service: release (reserved -= amount)
 
 ## Timeout
@@ -84,7 +90,7 @@ Failure может произойти на разных этапах:
     - 200 OK (reversed) → FAILED
     - 400 (cannot reverse) / timeout → продолжаем ждать
 
-Платёж остаётся в PROCESSING до получения финального ответа от провайдера. После 30 дней без ответа — автоматически FAILED, резерв возвращается пользователю.
+Платёж остаётся в PROCESSING до получения финального ответа от провайдера — см. [Consistency](consistency.md#3-провайдер--источник-истины).
 
 11. Kafka Connect → событие в Kafka
 12. Wallet Service: commit или release
@@ -124,4 +130,10 @@ Query Service подписан на все события и обновляет 
 | Notification Service      | Клиент     | Push / SMS |
 | Merchant Callback Service | Мерчант    | HTTP POST  |
 
-Оба сервиса — Kafka consumers, не блокируют основной flow.
+## См. также
+
+- [Resilience](resilience.md) — SLI/SLO, таймауты, retries, circuit breaker, bulkhead
+- [Caching](caching.md) — стратегии кэширования
+- [Observability](observability.md) — метрики, логи, трейсы, дашборды
+- [Scaling](scaling.md) — горизонтальное масштабирование, Kafka партиции, отказоустойчивость
+- [Queues](queues.md) — топики, DLQ, backpressure, гарантии доставки

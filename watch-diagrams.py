@@ -19,7 +19,7 @@ except ImportError:
 
 
 DIAGRAMS_DIR = Path(__file__).parent / "diagrams"
-PORT = 8080
+PORT = 8085
 
 # Track last change for live reload
 last_change = {"time": time.time(), "file": ""}

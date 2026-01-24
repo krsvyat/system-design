@@ -1,4 +1,5 @@
 @startuml erd-payment
+!theme plain
 hide circle
 
 entity "payments" {

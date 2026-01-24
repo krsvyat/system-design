@@ -1,0 +1,48 @@
+@startuml seq-cache
+!theme plain
+
+title Payment History Read (Cache-Aside)
+
+participant "Web/Mobile\nClient" as Client
+participant "API Gateway\n+ BFF" as BFF
+participant "Query Service" as Query
+participant "Redis" as Cache
+participant "Query DB" as DB
+
+== Cache Hit ==
+
+Client -> BFF: GET /payments?walletId=123&limit=20
+BFF -> Query: GET /payments?walletId=123
+Query -> Cache: GET payments:wallet:123
+Cache --> Query: [payment list]
+Query --> BFF: 200 OK
+BFF --> Client: payment history
+
+== Cache Miss ==
+
+Client -> BFF: GET /payments?walletId=123&limit=20
+BFF -> Query: GET /payments?walletId=123
+Query -> Cache: GET payments:wallet:123
+Cache --> Query: null
+
+Query -> DB: SELECT * FROM payment_projections\nWHERE wallet_id = 123
+DB --> Query: [payment list]
+
+Query -> Cache: SET payments:wallet:123 TTL=5m
+Query --> BFF: 200 OK
+BFF --> Client: payment history
+
+== Cache Fallback (Redis unavailable) ==
+
+Client -> BFF: GET /payments?walletId=123&limit=20
+BFF -> Query: GET /payments?walletId=123
+Query -> Cache: GET payments:wallet:123
+Cache --> Query: connection error
+
+Query -> DB: SELECT * FROM payment_projections\nWHERE wallet_id = 123
+DB --> Query: [payment list]
+note right of Query: Skip cache write,\nserve from DB
+Query --> BFF: 200 OK
+BFF --> Client: payment history
+
+@enduml

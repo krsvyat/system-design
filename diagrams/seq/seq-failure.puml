@@ -1,7 +1,9 @@
 @startuml seq-failure
+!theme plain
+
 title Payment Flow - Failure Scenario
 
-participant Customer
+participant "Client" as Customer
 participant BFF
 participant Wallet
 participant "Wallet DB" as WalletDB

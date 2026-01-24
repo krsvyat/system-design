@@ -1,0 +1,112 @@
+@startuml seq-resilience
+!theme plain
+
+title Payment → Provider: Resilience (CB + Retry Queue + DLQ)
+
+participant "Payment Service" as Payment
+participant "Circuit Breaker" as CB
+participant "Provider" as Provider
+participant "Payment DB" as DB
+participant "Kafka Connect" as KC
+participant "Kafka" as Kafka
+
+note over CB
+  Circuit Breaker:
+  - CLOSED: requests go to Provider
+  - OPEN: reject immediately (no HTTP)
+  - HALF-OPEN: allow 3 probe requests
+
+  Transitions:
+  - CLOSED → OPEN: 50% errors in last 10 calls
+  - OPEN → HALF-OPEN: after 60s cooldown
+  - HALF-OPEN → CLOSED: 3 probes succeed
+  - HALF-OPEN → OPEN: any probe fails
+end note
+
+note over CB: state: CLOSED
+
+== Phase 1: Sync Retries (one payment, in-memory) ==
+
+Payment -> CB: call
+CB -> Provider: POST /payments
+Provider --> CB: timeout (30s)
+CB --> Payment: error
+
+loop 3 more attempts (backoff 1s, 2s, 4s)
+    Payment -> CB: retry
+    CB -> Provider: POST /payments
+    Provider --> CB: timeout
+    CB --> Payment: error
+end
+
+note over Payment: All 4 attempts failed for this payment
+
+note over CB
+  8/10 errors (this + other payments)
+  → CB OPEN
+end note
+
+== Phase 2: Fallback to Retry Queue ==
+
+Payment -> DB: status=PROCESSING, retry_count=1
+Payment -> DB: INSERT outbox
+
+KC -> DB: poll outbox
+KC -> Kafka: PaymentRetryRequested\n→ payments.retry
+
+== Phase 3: Async Retry #1 (after 1m) ==
+
+Payment -> Kafka: poll
+Kafka --> Payment: {payment_id}
+
+Payment -> CB: call
+note over CB: OPEN → reject without HTTP
+CB --> Payment: CircuitBreakerOpenException
+
+Payment -> DB: retry_count=2
+Payment -> DB: INSERT outbox
+KC -> DB: poll
+KC -> Kafka: PaymentRetryRequested
+
+== Phase 4: Async Retry #2 (after 2m) ==
+
+Payment -> Kafka: poll
+Kafka --> Payment: {payment_id}
+
+note over CB: 60s passed → HALF-OPEN (allow probes)
+
+Payment -> CB: call
+CB -> Provider: POST /payments
+
+alt Provider recovered
+    Provider --> CB: 200 OK
+    CB --> Payment: success
+    note over CB: Probe OK → CLOSED
+    Payment -> DB: status=SUCCESS
+
+else Provider still down
+    Provider --> CB: timeout
+    CB --> Payment: error
+    note over CB: Probe failed → OPEN (reset cooldown)
+    Payment -> DB: retry_count=3
+    Payment -> DB: INSERT outbox
+    KC -> Kafka: PaymentRetryRequested
+end
+
+== Phase 5: DLQ (after max retries) ==
+
+note over Payment: retry_count > 3 → give up
+
+Payment -> DB: status=FAILED
+Payment -> DB: INSERT outbox (PaymentFailed)
+KC -> Kafka: PaymentFailed → payments.failed
+
+note over Kafka
+  Wallet: release reserve
+  Query: update read model
+  Notification: notify customer
+end note
+
+note right of Kafka: If consumer fails to process\n→ payments.retry.dlq
+
+@enduml

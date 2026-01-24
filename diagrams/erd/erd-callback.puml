@@ -1,4 +1,5 @@
 @startuml erd-callback
+!theme plain
 hide circle
 
 entity "callbacks" {

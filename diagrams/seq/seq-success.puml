@@ -1,7 +1,9 @@
 @startuml seq-success
+!theme plain
+
 title Payment Flow - Success Scenario
 
-participant Customer
+participant "Client" as Customer
 participant BFF
 participant Wallet
 participant "Wallet DB" as WalletDB
