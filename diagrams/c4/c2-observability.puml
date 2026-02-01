@@ -21,6 +21,7 @@ Rectangle "Application Services" as apps {
 
 ' === Collection ===
 Container(promtail, "Promtail", "DaemonSet", "Log shipper")
+Container(otel, "OTel Collector", "Deployment", "Trace receiver")
 
 ' === Storage Layer ===
 Rectangle "Storage" as storage {
@@ -47,7 +48,8 @@ Rel_D(promtail, apps, "read /var/log/pods")
 Rel_D(promtail, loki, "")
 
 ' Traces (push)
-Rel_D(apps, tempo, "traces")
+Rel_D(apps, otel, "OTLP")
+Rel_D(otel, tempo, "")
 
 ' Grafana reads
 Rel_D(grafana, prometheus, "PromQL")

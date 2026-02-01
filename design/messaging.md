@@ -44,7 +44,7 @@ Sync/async паттерны, события, топики.
 
 | Топик                 | Partition Key   | События                   | Консьюмеры                  |
 | --------------------- | --------------- | ------------------------- | --------------------------- |
-| `payments.initiated`  | wallet_id       | PaymentInitiated          | Payment, Query              |
+| `payments.initiated`  | payment_id      | PaymentInitiated          | Payment, Query              |
 | `payments.completed`  | payment_id      | PaymentCompleted          | Wallet, Query, Notification |
 | `payments.failed`     | payment_id      | PaymentFailed             | Wallet, Query, Notification |
 | `callbacks.received`  | provider_txn_id | ProviderCallbackReceived  | Payment                     |

@@ -24,12 +24,15 @@ SLI/SLO: см. [resilience.md](resilience.md#slislo).
 - `wallet_reserve_total`, `wallet_commit_total`, `wallet_release_total` — операции
 - `wallet_reserve_duration_seconds` — латентность резервирования
 - `wallet_balance_check_failed` — отказы
+- `wallet_outbox_pending_count` — записи в outbox, ожидающие публикации
 
 ### Payment Service
 
 - `payment_created_total`, `payment_completed_total`, `payment_failed_total` — статусы платежей
 - `payment_processing_duration_seconds` — время обработки (p50, p99)
 - `payment_in_processing` — платежи в статусе PROCESSING
+- `payment_outbox_pending_count` — записи в outbox, ожидающие публикации
+- `antifraud_circuit_breaker_state` — состояние CB для Anti-Fraud
 
 ### Callback Service
 
@@ -37,6 +40,7 @@ SLI/SLO: см. [resilience.md](resilience.md#slislo).
 - `callback_processing_duration_seconds` — латентность обработки
 - `callback_signature_invalid_total` — невалидные подписи
 - `callback_duplicate_total` — дубликаты
+- `callback_outbox_pending_count` — записи в outbox, ожидающие публикации
 
 ### Query Service
 
@@ -50,6 +54,7 @@ SLI/SLO: см. [resilience.md](resilience.md#slislo).
 - `kafka_messages_consumed_total`, `kafka_messages_produced_total` — обработанные/опубликованные сообщения
 - `kafka_consumer_processing_seconds` — время обработки сообщения
 - `kafka_dlq_messages_total` — сообщения в DLQ
+- `kafka_retry_queue_depth` — глубина retry топиков (`payments.retry`, `notifications.retry`)
 
 ## Метрики внешнего провайдера
 
@@ -61,12 +66,12 @@ SLI/SLO: см. [resilience.md](resilience.md#slislo).
 
 ## Стек
 
-| Компонент | Технология           | Назначение                                      |
-| --------- | -------------------- | ----------------------------------------------- |
-| Метрики   | Prometheus + Grafana | Сбор (pull) и визуализация метрик               |
-| Логи      | Loki + Promtail      | Promtail (DaemonSet) собирает логи, Loki хранит |
-| Трейсы    | Tempo                | Хранение трейсов, интеграция с Grafana          |
-| Алерты    | Alertmanager         | Группировка, дедупликация, роутинг оповещений   |
+| Компонент | Технология             | Назначение                                      |
+| --------- | ---------------------- | ----------------------------------------------- |
+| Метрики   | Prometheus + Grafana   | Сбор (pull) и визуализация метрик               |
+| Логи      | Loki + Promtail        | Promtail (DaemonSet) собирает логи, Loki хранит |
+| Трейсы    | OTel Collector + Tempo | OTel Collector принимает OTLP, Tempo хранит     |
+| Алерты    | Alertmanager           | Группировка, дедупликация, роутинг оповещений   |
 
 **Почему этот стек:**
 
@@ -76,8 +81,8 @@ SLI/SLO: см. [resilience.md](resilience.md#slislo).
 2. Loki + Promtail
    Promtail — DaemonSet на каждой ноде, читает логи из `/var/log/pods/*`, добавляет labels (pod, namespace). Loki индексирует только labels, не полный текст — дешевле ELK.
 
-3. Tempo
-   Хранит трейсы в S3 без индексации — дешевле Jaeger с Cassandra/Elasticsearch.
+3. OTel Collector + Tempo
+   OTel Collector принимает трейсы по OTLP, буферизует, отправляет в Tempo. Tempo хранит в S3 без индексации — дешевле Jaeger с Cassandra/Elasticsearch.
 
 ## Дашборды
 
@@ -92,12 +97,15 @@ SLI/SLO: см. [resilience.md](resilience.md#slislo).
 
 ### Operational Dashboard
 
-| Панель             | Тип         | Метрика                         |
-| ------------------ | ----------- | ------------------------------- |
-| Availability SLI   | Stat        | `http_requests_total`           |
-| Latency p99        | Stat        | `http_request_duration_seconds` |
-| Error Rate         | Time series | `http_requests_total`           |
-| Kafka Consumer Lag | Time series | `kafka_consumer_lag`            |
+| Панель             | Тип            | Метрика                         |
+| ------------------ | -------------- | ------------------------------- |
+| Availability SLI   | Stat           | `http_requests_total`           |
+| Latency p99        | Stat           | `http_request_duration_seconds` |
+| Error Rate         | Time series    | `http_requests_total`           |
+| Kafka Consumer Lag | Time series    | `kafka_consumer_lag`            |
+| Retry Queue Depth  | Time series    | `kafka_retry_queue_depth`       |
+| Outbox Backlog     | Time series    | `*_outbox_pending_count`        |
+| Circuit Breakers   | State timeline | `*_circuit_breaker_state`       |
 
 ### Provider Health Dashboard
 

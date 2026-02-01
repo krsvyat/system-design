@@ -107,6 +107,6 @@ note over Kafka
   Notification: notify customer
 end note
 
-note right of Kafka: If consumer fails to process\n→ payments.retry.dlq
+note right of Kafka: If Payment Service fails after 3 attempts\n→ sends to payments.retry.dlq
 
 @enduml

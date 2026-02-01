@@ -37,14 +37,14 @@ Rate limits:
 
 - API Gateway (Kong + Redis): 10k RPS global, 100 RPS per customer_id из `X-Customer-ID` header (ставит BFF после auth), для неаутентифицированных — per IP
 
-| Взаимодействие                | Таймаут | Повторы                            | Circuit Breaker  | Bulkhead           | Rate Limit | Fallback             |
-| ----------------------------- | ------- | ---------------------------------- | ---------------- | ------------------ | ---------- | -------------------- |
-| BFF → Wallet                  | 2с      | 2 sync (100ms)                     | нет              | HTTP pool: 100     | —          | нет                  |
-| BFF → Query                   | 2с      | 2 sync (100ms)                     | нет              | HTTP pool: 60      | —          | stale cache (TTL 5м) |
-| Payment → Anti-Fraud          | 500ms   | 1 sync                             | 50% err / 10 req | gRPC pool: 50      | —          | ALLOW (fail-open)    |
-| Payment → Provider            | 30с     | 3 sync (1-2-4с) + 3 async (1-2-4м) | 50% err / 10 req | HTTP pool: 200     | 1000 rps   | DLQ                  |
-| Callback → Payment            | 2с      | 3 sync (exp backoff)               | нет              | —                  | —          | DLQ                  |
-| Notification → SMS/Email/Push | 10с     | 3 sync + 3 async (5м)              | 50% err / 10 req | HTTP pool: 100 × 3 | 500 rps    | DLQ                  |
+| Взаимодействие                | Таймаут | Повторы                            | Circuit Breaker  | Bulkhead           | Rate Limit | Fallback                |
+| ----------------------------- | ------- | ---------------------------------- | ---------------- | ------------------ | ---------- | ----------------------- |
+| BFF → Wallet                  | 2с      | 2 sync (100ms)                     | нет              | HTTP pool: 100     | —          | нет                     |
+| BFF → Query                   | 2с      | 2 sync (100ms)                     | нет              | HTTP pool: 60      | —          | нет                     |
+| Payment → Anti-Fraud          | 500ms   | 1 sync                             | 50% err / 10 req | gRPC pool: 50      | —          | Degraded mode (см ниже) |
+| Payment → Provider            | 30с     | 3 sync (1-2-4с) + 3 async (1-2-4м) | 50% err / 10 req | HTTP pool: 200     | 1000 rps   | DLQ                     |
+| Callback → Payment            | 2с      | 3 sync (exp backoff)               | нет              | —                  | —          | DLQ                     |
+| Notification → SMS/Email/Push | 10с     | 3 sync + 3 async (5м)              | 50% err / 10 req | HTTP pool: 100 × 3 | 500 rps    | DLQ                     |
 
 ## Обоснования
 
@@ -79,10 +79,10 @@ Rate limits:
    Потому что SLO 3с, аналогично Wallet. Query делает SELECT из read-модели — должно быть быстро (~50ms). 2с — запас на сложные запросы (фильтры, пагинация).
 
 2. Retry: 2 sync (100ms)
-   Потому что read-запросы идемпотентны, retry безопасен. При таймауте — сразу fallback на cache, retry только для transient errors (503, connection reset).
+   Потому что read-запросы идемпотентны, retry безопасен.
 
 3. Circuit Breaker: нет
-   Потому что есть fallback на кэш. CB избыточен — при сбое Query сразу отдаём из кэша, не нужно ждать открытия CB.
+   Нет fallback — с CB или без, пользователь получит ошибку. CB добавит cooldown при восстановлении сервиса.
 
 4. Bulkhead: HTTP pool 60
    Отдельный HTTP-пул в BFF для вызовов Query: ~600 RPS × latency 100ms = 60 соединений.
@@ -91,8 +91,8 @@ Rate limits:
 5. Rate Limit: нет (на уровне BFF)
    Потому что rate limit уже применён на API Gateway. Query — read-only сервис, легко масштабируется горизонтально. Дополнительный rate limit избыточен.
 
-6. Fallback: stale cache (Redis, TTL 5м)
-   Потому что история платежей — не real-time данные. Если Query недоступен, отдаём последние закэшированные данные. Пользователь видит историю 5-минутной давности — лучше, чем ошибку. Свежий платёж может не отобразиться сразу — приемлемо.
+6. Fallback: нет
+   Клиент кэширует локально.
 
 **Payment → Anti-Fraud**
 
@@ -114,8 +114,11 @@ Rate limits:
 5. Rate Limit: нет
    Потому что Anti-Fraud — внутренний сервис, масштабируется вместе с Payment. Нагрузка на Anti-Fraud = нагрузка на Payment (1:1). Rate limit на входе в Payment уже защищает Anti-Fraud.
 
-6. Fallback: ALLOW
-   Потому что бизнес-решение: риск пропустить fraudulent платёж при сбое Anti-Fraud меньше, чем потерять 100% платежей.
+6. Fallback: Degraded mode
+   При недоступности Anti-Fraud — ограниченный режим вместо полного fail-open или fail-closed. Платежи до 50 000₽ разрешаются, свыше — отклоняются.
+
+   **Почему не fail-open (ALLOW all):** риск fraud и нарушение регуляторных требований.
+   **Почему не fail-closed (DENY all):** 100% платежей падают, DoS-вектор через атаку на Anti-Fraud.
 
 **Payment → Provider**
 

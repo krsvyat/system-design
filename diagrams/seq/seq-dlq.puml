@@ -1,34 +1,38 @@
 @startuml seq-dlq
 !theme plain
 
-title DLQ: Manual Review Flow
+title DLQ: Processing Flow
 
 participant "Kafka\n{topic}.dlq" as dlq
+participant "Cron Job" as cron
+participant "Kafka\n{topic}" as kafka
 actor "Engineer" as eng
-
-note over dlq
-  Consumer couldn't process message
-  after Kafka retry policy (3 attempts)
-end note
 
 == Alert ==
 
 dlq -> eng: Alert: dlq_messages_total > 0
 
-== Investigation ==
+alt Auto-retry (callbacks.received, merchant.callbacks)
 
-activate eng
+    cron -> dlq: Read messages
+    dlq --> cron: {messages}
+    cron -> kafka: Republish to original topic
 
-eng -> dlq: Read message
-dlq --> eng: {message, error}
+    note over cron: callbacks.received: every 1h\nmerchant.callbacks: every 15m
 
-eng -> eng: Analyze root cause, fix bug in code
+else Manual review (all others)
 
-note over dlq
-  Message stays in DLQ
-  Auto-deleted after retention (7 days)
-end note
+    activate eng
+    eng -> dlq: Read message
+    dlq --> eng: {message, error}
+    eng -> eng: Analyze root cause, fix bug
+    deactivate eng
 
-deactivate eng
+    note over dlq
+      Message stays in DLQ
+      Auto-deleted after retention (7 days)
+    end note
+
+end
 
 @enduml

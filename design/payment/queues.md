@@ -40,16 +40,21 @@
 
 ## DLQ (Dead Letter Queue)
 
-Сервис не смог обработать сообщение из Kafka (баг, ошибка данных, downstream недоступен). После 3 попыток Kafka перекладывает сообщение в DLQ топик.
+Сервис не смог обработать сообщение из Kafka (баг, ошибка данных, downstream недоступен). Consumer отправляет сообщение в DLQ после 3 неудачных попыток обработки.
 
-**Пример:** Payment Service читает из `payments.initiated`, но падает с ошибкой → после 3 retry сообщение уходит в `payments.initiated.dlq`.
+**Пример:** Payment Service читает из `payments.initiated`, но падает с ошибкой → после 3 retry Payment Service публикует сообщение в `payments.initiated.dlq`.
 
-**Обработка DLQ:**
+**Две политики обработки DLQ:**
 
-| DLQ топики                                                                                                       | Что происходит                                          |
-| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| payments.initiated.dlq, payments.completed.dlq, payments.failed.dlq, payments.retry.dlq, notifications.retry.dlq | Critical алерт, инженер анализирует, сообщение истекает |
-| callbacks.received.dlq, merchant.callbacks.dlq                                                                   | Cron переотправляет в оригинальный топик через интервал |
+| Политика      | DLQ топики                                     | Что происходит                               |
+| ------------- | ---------------------------------------------- | -------------------------------------------- |
+| Manual review | payments.\*, notifications.retry.dlq           | Алерт, инженер анализирует, retention 7 дней |
+| Auto-retry    | callbacks.received.dlq, merchant.callbacks.dlq | Cron переотправляет в оригинальный топик     |
+
+**Почему разные политики:**
+
+- **Manual review** для payment events: ошибка обработки `PaymentInitiated` или `PaymentCompleted` — скорее баг в коде или проблема с данными. Автоматический retry не поможет, нужен анализ.
+- **Auto-retry** для callbacks: внешние события от провайдера или для мерчанта. Ошибка может быть transient (сеть, временная недоступность). Retry имеет смысл.
 
 **Retention:** 7 дней. Сообщения удаляются автоматически.
 
